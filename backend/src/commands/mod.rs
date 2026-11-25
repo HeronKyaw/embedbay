@@ -1,3 +1,7 @@
+pub mod engines;
+pub mod groups_tags;
+pub mod instances;
+
 use serde::Serialize;
 use tauri::{AppHandle, State};
 use tauri_plugin_autostart::ManagerExt;

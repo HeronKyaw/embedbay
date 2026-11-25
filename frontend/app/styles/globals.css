@@ -45,6 +45,11 @@
 }
 
 /* Subtle custom scrollbars matching Deep Harbor theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -61,4 +66,20 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
+}
+
+dialog:modal {
+  overscroll-behavior: contain;
+  margin: auto;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: var(--text-primary);
+  max-width: min(94vw, 720px);
+  max-height: 90vh;
+}
+
+dialog::backdrop {
+  background: rgba(5, 8, 14, 0.72);
+  backdrop-filter: blur(4px);
 }

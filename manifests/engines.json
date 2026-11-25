@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-11-25T00:00:00Z",
+  "engines": [
+    {
+      "engine_type": "qdrant",
+      "display_name": "Qdrant",
+      "description": "High-performance vector similarity engine written in Rust with rich payload filtering and HNSW indexing.",
+      "tier": 1,
+      "embedded": false,
+      "default_port": 6333,
+      "default_grpc_port": 6334,
+      "versions": [
+        {
+          "version": "1.20.2",
+          "recommended": true,
+          "targets": {
+            "x86_64-pc-windows-msvc": {
+              "url": "https://github.com/qdrant/qdrant/releases/download/v1.20.2/qdrant-x86_64-pc-windows-msvc.zip",
+              "sha256": "7a5290b9ef1b204b250a1626ddafec580647ba3cc62ba1630b3a8efdc2718b32",
+              "size_bytes": 32545356,
+              "archive_type": "zip",
+              "binary_rel_path": "qdrant.exe",
+              "extra_archives": []
+            }
+          }
+        },
+        {
+          "version": "1.20.1",
+          "recommended": false,
+          "targets": {
+            "x86_64-pc-windows-msvc": {
+              "url": "https://github.com/qdrant/qdrant/releases/download/v1.20.1/qdrant-x86_64-pc-windows-msvc.zip",
+              "sha256": "cdbcf8831a19b40785af300d10b762501fb3ff796f1a3c8d7fa142c67f76ad62",
+              "size_bytes": 32466981,
+              "archive_type": "zip",
+              "binary_rel_path": "qdrant.exe",
+              "extra_archives": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "engine_type": "chroma",
+      "display_name": "Chroma",
+      "description": "Standalone Rust CLI server for Chroma local vector collections with zero Python or Docker dependencies.",
+      "tier": 1,
+      "embedded": false,
+      "default_port": 8000,
+      "default_grpc_port": null,
+      "versions": [
+        {
+          "version": "1.4.4",
+          "recommended": true,
+          "targets": {
+            "x86_64-pc-windows-msvc": {
+              "url": "https://github.com/chroma-core/chroma/releases/download/cli-1.4.4/chroma-windows.exe",
+              "sha256": "8697d3f5f55c4f982c6e114ac01cf006daa0c68d87e791d9b5558b8670f89d05",
+              "size_bytes": 55364096,
+              "archive_type": "binary",
+              "binary_rel_path": "chroma.exe",
+              "extra_archives": []
+            }
+          }
+        },
+        {
+          "version": "1.4.3",
+          "recommended": false,
+          "targets": {
+            "x86_64-pc-windows-msvc": {
+              "url": "https://github.com/chroma-core/chroma/releases/download/cli-1.4.3/chroma-windows.exe",
+              "sha256": "b9dd51da4198ad839c85059c5a0fd6c96d7ac3cf54dcf7b75ca19457e3a28856",
+              "size_bytes": 54077952,
+              "archive_type": "binary",
+              "binary_rel_path": "chroma.exe",
+              "extra_archives": []
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

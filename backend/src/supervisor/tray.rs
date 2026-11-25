@@ -34,10 +34,27 @@ pub fn setup_tray(app: &App) -> tauri::Result<()> {
     let icon = Image::from_bytes(TRAY_ICON_BYTES)?;
 
     let open_item = MenuItem::with_id(app, "open", "Open EmbedBay", true, None::<&str>)?;
+    let stop_all_item = MenuItem::with_id(
+        app,
+        "stop_all",
+        "Stop All Running Services",
+        true,
+        None::<&str>,
+    )?;
+    let stop_idle_item = MenuItem::with_id(
+        app,
+        "stop_idle",
+        "Stop Idle Services",
+        true,
+        None::<&str>,
+    )?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit EmbedBay", true, None::<&str>)?;
 
-    let menu = Menu::with_items(app, &[&open_item, &separator, &quit_item])?;
+    let menu = Menu::with_items(
+        app,
+        &[&open_item, &stop_all_item, &stop_idle_item, &separator, &quit_item],
+    )?;
 
     TrayIconBuilder::with_id("embedbay-tray")
         .icon(icon)
@@ -48,10 +65,28 @@ pub fn setup_tray(app: &App) -> tauri::Result<()> {
             "open" => {
                 let _ = open_or_focus_main_window(app_handle);
             }
+            "stop_all" => {
+                let handle = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let state = handle.state::<AppState>();
+                    let _ = state.process_manager.stop_all_instances().await;
+                });
+            }
+            "stop_idle" => {
+                let handle = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let state = handle.state::<AppState>();
+                    let _ = state.process_manager.stop_idle_instances(5).await;
+                });
+            }
             "quit" => {
-                let state = app_handle.state::<AppState>();
-                state.is_quitting.store(true, Ordering::SeqCst);
-                app_handle.exit(0);
+                let handle = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let state = handle.state::<AppState>();
+                    let _ = state.process_manager.stop_all_instances().await;
+                    state.is_quitting.store(true, Ordering::SeqCst);
+                    handle.exit(0);
+                });
             }
             _ => {}
         })

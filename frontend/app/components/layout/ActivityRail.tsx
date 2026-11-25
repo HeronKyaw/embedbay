@@ -5,8 +5,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatRamMb } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/useAppStore";
+import { useRuntimeStore } from "@/stores/useRuntimeStore";
 import type { ActivitySection } from "@/types/system";
 
 interface RailItem {
@@ -25,6 +27,8 @@ const RAIL_ITEMS: readonly RailItem[] = [
 export function ActivityRail() {
   const activeSection = useAppStore((s) => s.activeSection);
   const setActiveSection = useAppStore((s) => s.setActiveSection);
+  const totalRamBytes = useRuntimeStore((s) => s.totalRamBytes);
+  const runningCount = useRuntimeStore((s) => s.runningCount);
 
   return (
     <aside
@@ -65,15 +69,26 @@ export function ActivityRail() {
       {/* Bottom Total Local DB RAM Usage Badge */}
       <Tooltip>
         <TooltipTrigger>
-          <div className="flex flex-col items-center gap-1 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-1 py-1.5 text-center">
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--status-stopped)]" />
+          <button
+            type="button"
+            onClick={() => setActiveSection("runtimes")}
+            className="flex flex-col items-center gap-1 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-1 py-1.5 text-center cursor-pointer hover:border-[var(--border-strong)]"
+          >
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                runningCount > 0
+                  ? "bg-[var(--status-running)]"
+                  : "bg-[var(--status-stopped)]",
+              )}
+            />
             <span className="font-mono text-[9px] font-medium leading-none text-[var(--text-secondary)]">
-              0 MB
+              {formatRamMb(totalRamBytes)}
             </span>
-          </div>
+          </button>
         </TooltipTrigger>
         <TooltipContent side="right">
-          Total Local DB RAM Usage (0 active)
+          Total Local DB RAM Usage ({runningCount} active)
         </TooltipContent>
       </Tooltip>
     </aside>
