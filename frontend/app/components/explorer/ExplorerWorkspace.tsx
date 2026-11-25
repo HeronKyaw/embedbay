@@ -107,7 +107,9 @@ function CollectionTabPane({
   const [records, setRecords] = React.useState<VectorRecord[]>([]);
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
   const [totalCount, setTotalCount] = React.useState<number | null>(null);
-  const [loading, setLoading] = React.useState(false);
+  const [loading, setLoading] = React.useState(
+    Boolean(tab.target && tab.collection),
+  );
   const [upsertOpen, setUpsertOpen] = React.useState(false);
   const [confirmDeleteCol, setConfirmDeleteCol] = React.useState(false);
 
