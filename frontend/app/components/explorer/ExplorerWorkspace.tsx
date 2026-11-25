@@ -409,7 +409,6 @@ export function ExplorerWorkspace({
   const [deletingCol, setDeletingCol] = React.useState(false);
   const [connBusy, setConnBusy] = React.useState(false);
   const [connectingKey, setConnectingKey] = React.useState<string | null>(null);
-  const [switchError, setSwitchError] = React.useState<string | null>(null);
   const switcherBtnRef = React.useRef<HTMLButtonElement | null>(null);
   const probeSeqRef = React.useRef(0);
   const mountedRef = React.useRef(true);
@@ -513,7 +512,6 @@ export function ExplorerWorkspace({
     probeSeqRef.current += 1;
     setConnectingKey(null);
     setSwitcherOpen(false);
-    setSwitchError(null);
   }, []);
 
   const handleOpenConnection = async (
@@ -522,7 +520,6 @@ export function ExplorerWorkspace({
     ready: boolean,
   ) => {
     const seq = ++probeSeqRef.current;
-    setSwitchError(null);
 
     if (target.kind === "remote_connection") {
       if (connectingKey === key) return;
@@ -536,7 +533,6 @@ export function ExplorerWorkspace({
 
       if (!res.ok) {
         const reason = res.error ?? "Unable to reach endpoint.";
-        setSwitchError(`Could not reach "${connName}": ${reason}`);
         toast.error(`Could not reach "${connName}"`, reason);
         return;
       }
@@ -545,7 +541,6 @@ export function ExplorerWorkspace({
       setSelectedConnectionKey(key);
       setActiveTabId(null);
       setSwitcherOpen(false);
-      setSwitchError(null);
       return;
     }
 
@@ -628,7 +623,6 @@ export function ExplorerWorkspace({
     setSelectedConnectionKey(null);
     setActiveTabId(null);
     setSwitcherOpen(false);
-    setSwitchError(null);
   }, [setActiveTabId, setSelectedConnectionKey]);
 
   const handleExplorerBack = React.useCallback(() => {
@@ -814,7 +808,6 @@ export function ExplorerWorkspace({
       ref={switcherBtnRef}
       type="button"
       onClick={() => {
-        setSwitchError(null);
         setSwitcherOpen((prev) => !prev);
       }}
       aria-expanded={switcherOpen}
@@ -1321,8 +1314,6 @@ export function ExplorerWorkspace({
         target={resolvedConnection?.target ?? null}
         ready={resolvedConnection?.ready ?? false}
         connectingKey={connectingKey}
-        switchError={switchError}
-        onClearSwitchError={() => setSwitchError(null)}
         onSwitchConnection={handleOpenConnection}
         onCreateCollection={() => setCreateColOpen(true)}
         onRequestDeleteCollection={(col) => setDeleteColName(col)}

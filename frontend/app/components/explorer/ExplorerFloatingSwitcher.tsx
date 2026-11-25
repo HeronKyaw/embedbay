@@ -1,6 +1,5 @@
 import * as React from "react";
 import {
-  AlertCircle,
   Database,
   Globe,
   Layers,
@@ -37,8 +36,6 @@ export function ExplorerFloatingSwitcher({
   target,
   ready,
   connectingKey = null,
-  switchError = null,
-  onClearSwitchError,
   onSwitchConnection,
   onCreateCollection,
   onRequestDeleteCollection,
@@ -52,8 +49,6 @@ export function ExplorerFloatingSwitcher({
   target: ConnectionTarget | null;
   ready: boolean;
   connectingKey?: string | null;
-  switchError?: string | null;
-  onClearSwitchError?: () => void;
   onSwitchConnection: (
     key: string,
     target: ConnectionTarget,
@@ -216,7 +211,6 @@ export function ExplorerFloatingSwitcher({
             <button
               type="button"
               onClick={() => {
-                onClearSwitchError?.();
                 setTab("collections");
               }}
               className={cn(
@@ -232,7 +226,6 @@ export function ExplorerFloatingSwitcher({
           <button
             type="button"
             onClick={() => {
-              onClearSwitchError?.();
               setTab("connections");
             }}
             className={cn(
@@ -300,22 +293,6 @@ export function ExplorerFloatingSwitcher({
 
       {/* List Body */}
       <div className="flex-1 space-y-1 overflow-y-auto p-2">
-        {switchError && (
-          <div className="mb-1.5 flex items-start gap-2 rounded-lg border border-[var(--status-error)]/40 bg-[var(--status-error)]/10 px-2.5 py-2 text-[11px] text-[var(--status-error)]">
-            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span className="min-w-0 flex-1 break-words">{switchError}</span>
-            {onClearSwitchError && (
-              <button
-                type="button"
-                onClick={onClearSwitchError}
-                aria-label="Dismiss error"
-                className="shrink-0 rounded p-0.5 opacity-75 hover:opacity-100 cursor-pointer"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-        )}
         {tab === "collections" && connectionKey && target ? (
           !ready ? (
             <div className="rounded-lg border border-dashed border-[var(--border-subtle)] p-4 text-center">

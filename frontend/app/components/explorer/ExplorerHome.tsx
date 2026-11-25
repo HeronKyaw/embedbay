@@ -1,6 +1,5 @@
 import * as React from "react";
 import {
-  AlertCircle,
   ArrowRight,
   ChevronDown,
   ChevronRight,
@@ -285,10 +284,8 @@ function RemoteConnectionCard({
     (s) => s.clearConnectionCollections,
   );
   const closeTabsForConnection = useTabsStore((s) => s.closeTabsForConnection);
-  const clearConnectionError = useTabsStore((s) => s.clearConnectionError);
 
   const key = `remote:${conn.id}`;
-  const connectionError = useTabsStore((s) => s.connectionErrors[key] ?? null);
   const target: ConnectionTarget = {
     kind: "remote_connection",
     connection_id: conn.id,
@@ -403,27 +400,6 @@ function RemoteConnectionCard({
                 <span>{t.name}</span>
               </span>
             ))}
-          </div>
-        )}
-
-        {connectionError && (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="mt-2.5 flex items-start gap-2 rounded-lg border border-[var(--status-error)]/40 bg-[var(--status-error)]/10 px-2.5 py-2 text-[11px] text-[var(--status-error)]"
-          >
-            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span className="min-w-0 flex-1 break-words">{connectionError}</span>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                clearConnectionError(key);
-              }}
-              aria-label="Dismiss connection error"
-              className="shrink-0 rounded p-0.5 opacity-75 hover:opacity-100 cursor-pointer"
-            >
-              <X className="h-3 w-3" />
-            </button>
           </div>
         )}
       </div>
