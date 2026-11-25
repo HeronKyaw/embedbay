@@ -1,0 +1,101 @@
+/* EmbedBay Design Tokens — Deep Harbor Charcoal + Bay Teal (PLAN.md Section 6.1 & 6.2) */
+
+:root,
+[data-theme="dark"],
+.dark {
+  color-scheme: dark;
+
+  /* Surfaces & Borders */
+  --bg-canvas: #090C12;
+  --bg-surface: #10151F;
+  --bg-elevated: #161D2B;
+  --border-subtle: #1E2738;
+  --border-strong: #2B374D;
+
+  /* Typography */
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+
+  /* Brand & Semantic Accents */
+  --accent-primary: #14B8A6;
+  --accent-primary-hover: #2DD4BF;
+  --accent-secondary: #38BDF8;
+  --accent-ai: #818CF8;
+
+  /* Status Indicators */
+  --status-running: #10B981;
+  --status-starting: #F59E0B;
+  --status-stopped: #64748B;
+  --status-error: #F43F5E;
+
+  /* Group & Tag Preset Swatches (Section 6.2) */
+  --swatch-teal: #14B8A6;
+  --swatch-sky: #38BDF8;
+  --swatch-indigo: #818CF8;
+  --swatch-violet: #A78BFA;
+  --swatch-pink: #F472B6;
+  --swatch-orange: #FB923C;
+  --swatch-emerald: #10B981;
+  --swatch-rose: #F43F5E;
+
+  /* Pill opacity mixing parameters for Dark Mode */
+  --tag-tint-opacity: 15%;
+  --tag-border-opacity: 40%;
+}
+
+[data-theme="light"],
+.light {
+  color-scheme: light;
+
+  /* Surfaces & Borders */
+  --bg-canvas: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #F1F5F9;
+  --border-subtle: #E2E8F0;
+  --border-strong: #CBD5E1;
+
+  /* Typography */
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #64748B;
+
+  /* Brand & Semantic Accents */
+  --accent-primary: #0D9488;
+  --accent-primary-hover: #0F766E;
+  --accent-secondary: #0284C7;
+  --accent-ai: #4F46E5;
+
+  /* Status Indicators */
+  --status-running: #059669;
+  --status-starting: #D97706;
+  --status-stopped: #94A3B8;
+  --status-error: #E11D48;
+
+  /* Group & Tag Preset Swatches (Section 6.2) */
+  --swatch-teal: #14B8A6;
+  --swatch-sky: #38BDF8;
+  --swatch-indigo: #818CF8;
+  --swatch-violet: #A78BFA;
+  --swatch-pink: #F472B6;
+  --swatch-orange: #FB923C;
+  --swatch-emerald: #10B981;
+  --swatch-rose: #F43F5E;
+
+  /* Pill opacity mixing parameters for Light Mode */
+  --tag-tint-opacity: 10%;
+  --tag-border-opacity: 35%;
+}
+
+/* Curated Group / Tag Pill Styling */
+.tag-pill {
+  --pill-color: var(--swatch-teal);
+  background-color: color-mix(in srgb, var(--pill-color) var(--tag-tint-opacity), transparent);
+  border: 1px solid color-mix(in srgb, var(--pill-color) var(--tag-border-opacity), transparent);
+  color: var(--pill-color);
+}
+
+[data-theme="light"] .tag-pill,
+.light .tag-pill {
+  color: color-mix(in srgb, var(--pill-color) 72%, #0F172A);
+}

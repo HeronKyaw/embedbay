@@ -1,0 +1,17 @@
+{
+  "name": "embedbay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Vector DB Manager & Explorer",
+  "scripts": {
+    "dev": "cd backend && npx tauri dev",
+    "build": "cd backend && npx tauri build",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "backend:check": "cargo check --manifest-path backend/Cargo.toml",
+    "backend:test": "cargo test --manifest-path backend/Cargo.toml"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.2.0"
+  }
+}

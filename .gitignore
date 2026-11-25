@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/target/
+
+# Build outputs
+frontend/dist/
+frontend/.vite/
+dist/
+*.tsbuildinfo
+
+# Local SQLite & logs
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.env
+.env.*
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
