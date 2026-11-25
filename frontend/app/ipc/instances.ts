@@ -116,3 +116,28 @@ export async function suggestAvailablePort(
   if (!isTauriRuntime()) return startPort;
   return invoke<number>("suggest_available_port", { host, startPort });
 }
+
+export interface BackupResult {
+  zip_path: string;
+  size_bytes: number;
+  restarted: boolean;
+}
+
+export interface RestoreResult {
+  instance_id: string;
+  restarted: boolean;
+}
+
+export async function backupInstance(
+  id: string,
+  destZip: string,
+): Promise<BackupResult> {
+  return invoke<BackupResult>("backup_instance", { id, destZip });
+}
+
+export async function restoreInstance(
+  id: string,
+  srcZip: string,
+): Promise<RestoreResult> {
+  return invoke<RestoreResult>("restore_instance", { id, srcZip });
+}

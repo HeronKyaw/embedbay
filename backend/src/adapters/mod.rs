@@ -1,5 +1,7 @@
 pub mod chroma;
 pub mod embeddings;
+pub mod lancedb;
+pub mod pgvector;
 pub mod qdrant;
 
 use std::collections::HashMap;
@@ -261,6 +263,12 @@ pub async fn resolve_adapter(
                     None,
                     HashMap::new(),
                 )?)),
+                "lancedb" => Ok(Box::new(lancedb::LanceDbAdapter::new(
+                    std::path::PathBuf::from(&inst.data_dir),
+                )?)),
+                "pgvector" => Ok(Box::new(pgvector::PgVectorAdapter::from_local(
+                    host, inst.port,
+                ))),
                 other => Err(AdapterError::UnsupportedEngine(other.to_string())),
             }
         }
@@ -313,6 +321,10 @@ fn build_remote_adapter(
             auth_type,
             secret,
             extra,
+        )?)),
+        "pgvector" => Ok(Box::new(pgvector::PgVectorAdapter::from_remote(
+            &endpoint_url,
+            secret.as_deref(),
         )?)),
         other => Err(AdapterError::UnsupportedEngine(other.to_string())),
     }

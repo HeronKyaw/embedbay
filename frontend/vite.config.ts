@@ -17,6 +17,9 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./app"),
     },
   },
+  define: {
+    global: "globalThis",
+  },
   clearScreen: false,
   server: {
     port: 5173,

@@ -1,6 +1,8 @@
 pub mod chroma;
 pub mod installer;
+pub mod lancedb;
 pub mod manifest;
+pub mod pgvector;
 pub mod qdrant;
 
 use std::path::{Path, PathBuf};
@@ -90,6 +92,8 @@ pub fn get_provider(engine_type: &str) -> Result<Box<dyn EngineProvider>, Engine
     match engine_type {
         "qdrant" => Ok(Box::new(qdrant::QdrantProvider)),
         "chroma" => Ok(Box::new(chroma::ChromaProvider)),
+        "pgvector" => Ok(Box::new(pgvector::PgVectorProvider)),
+        "lancedb" => Ok(Box::new(lancedb::LanceDbProvider)),
         other => Err(EngineError::UnsupportedEngine(other.to_string())),
     }
 }

@@ -1,4 +1,5 @@
 pub mod adapters;
+pub mod analytics;
 pub mod commands;
 pub mod db;
 pub mod engines;
@@ -39,6 +40,7 @@ pub fn run() {
     let start_minimized = std::env::args().any(|arg| arg == "--minimized");
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app_handle, args, _cwd| {
             // If a second launch happens without --minimized, open or focus the UI window.
             if !args.iter().any(|arg| arg == "--minimized") {
@@ -148,6 +150,12 @@ pub fn run() {
             commands::explorer::upsert_records,
             commands::explorer::delete_records,
             commands::explorer::search_vectors,
+            commands::instances::backup_instance,
+            commands::instances::restore_instance,
+            commands::analytics::compute_embedding_projection,
+            commands::transfer::import_records,
+            commands::transfer::export_records,
+            commands::transfer::export_search_results,
         ])
         .build(tauri::generate_context!())
         .expect("error while building EmbedBay Tauri application");

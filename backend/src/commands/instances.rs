@@ -3,6 +3,10 @@ use std::path::Path;
 use tauri::State;
 
 use crate::db::models::{CreateInstancePayload, InstanceRecord, UpdateInstancePayload};
+use crate::supervisor::backup::{
+    backup_instance as raw_backup_instance, restore_instance as raw_restore_instance, BackupResult,
+    RestoreResult,
+};
 use crate::supervisor::logs::LogEntry;
 use crate::supervisor::metrics::{InstanceMetrics, SystemMetricsSummary};
 use crate::supervisor::process_manager::{
@@ -191,4 +195,22 @@ pub fn suggest_available_port(
     start_port: u16,
 ) -> Result<u16, String> {
     raw_suggest_port(&state.db, host.as_deref().unwrap_or("127.0.0.1"), start_port)
+}
+
+#[tauri::command]
+pub async fn backup_instance(
+    state: State<'_, AppState>,
+    id: String,
+    dest_zip: String,
+) -> Result<BackupResult, String> {
+    raw_backup_instance(&state.db, &state.process_manager, &id, Path::new(&dest_zip)).await
+}
+
+#[tauri::command]
+pub async fn restore_instance(
+    state: State<'_, AppState>,
+    id: String,
+    src_zip: String,
+) -> Result<RestoreResult, String> {
+    raw_restore_instance(&state.db, &state.process_manager, &id, Path::new(&src_zip)).await
 }

@@ -1,4 +1,5 @@
 pub mod autostart;
+pub mod backup;
 pub mod logs;
 pub mod metrics;
 pub mod process_manager;

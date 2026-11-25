@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-25T00:00:00Z",
+  "updated_at": "2026-11-25T18:45:00Z",
   "engines": [
     {
       "engine_type": "qdrant",
@@ -74,6 +74,64 @@
               "size_bytes": 54077952,
               "archive_type": "binary",
               "binary_rel_path": "chroma.exe",
+              "extra_archives": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "engine_type": "pgvector",
+      "display_name": "PostgreSQL + pgvector",
+      "description": "Portable PostgreSQL 17 server paired with native pgvector (vector.dll) for SQL + HNSW/IVFFlat vector search.",
+      "tier": 1,
+      "embedded": false,
+      "default_port": 5432,
+      "default_grpc_port": null,
+      "versions": [
+        {
+          "version": "17.9-pgvector0.8.6",
+          "recommended": true,
+          "targets": {
+            "x86_64-pc-windows-msvc": {
+              "url": "https://get.enterprisedb.com/postgresql/postgresql-17.9-1-windows-x64-binaries.zip",
+              "sha256": "",
+              "size_bytes": 334313473,
+              "archive_type": "zip",
+              "binary_rel_path": "pgsql/bin/postgres.exe",
+              "extra_archives": [
+                {
+                  "url": "https://github.com/andreiramani/pgvector_pgsql_windows/releases/download/0.8.6_17/vector.v0.8.6-pg17.zip",
+                  "sha256": "420388e9e9f05d92f06d6967ce8772483629b27a66ca9255925fa0fdd445438e",
+                  "size_bytes": 169689,
+                  "archive_type": "zip",
+                  "dest_subdir": "pgsql"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "engine_type": "lancedb",
+      "display_name": "LanceDB (Embedded)",
+      "description": "Zero-daemon columnar vector store opening local .lance directories directly with 0 MB background RAM.",
+      "tier": 1,
+      "embedded": true,
+      "default_port": 0,
+      "default_grpc_port": null,
+      "versions": [
+        {
+          "version": "embedded-1.0",
+          "recommended": true,
+          "targets": {
+            "universal": {
+              "url": "embedded://local",
+              "sha256": "embedded",
+              "size_bytes": 0,
+              "archive_type": "binary",
+              "binary_rel_path": "embedded",
               "extra_archives": []
             }
           }
