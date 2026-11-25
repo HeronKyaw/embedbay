@@ -1,0 +1,102 @@
+# EmbedBay
+
+**Zero-Docker native vector database manager, runtime supervisor, and multi-engine explorer built with Tauri v2, Rust, and React 19.**
+
+EmbedBay installs, runs, monitors, and explores local vector databases natively on Windows (with cross-platform foundations in place for macOS and Linux), without requiring Docker Desktop or heavy Electron runtimes.
+
+---
+
+## Key Features
+
+- **Native Engine Store (`manifests/engines.json`)**
+  One-click download, SHA-256 checksum verification, Zip-Slip-safe archive extraction, and versioned isolation for native engines.
+- **Process Supervisor & System Tray Persistence**
+  - Spawns managed engines with `CREATE_NO_WINDOW` (`0x08000000`) on Windows—no flashing console windows.
+  - TCP port conflict detection + automatic port suggestion, HTTP/TCP health polling, exponential backoff crash restarts, graceful shutdown (`CTRL_BREAK_EVENT` / `pg_ctl stop`), and rotating log streaming (`10 MB x 3` files, 1,000-line memory ring buffer).
+  - Live `sysinfo` per-instance RAM, CPU, uptime, and disk metrics.
+  - **Destroy-on-close WebView** reclaims UI RAM while background databases continue running in the System Tray; supports **Start with Windows (`--minimized`)** and single-instance window focus locking.
+  - **Per-instance Idle Auto-Stop** and **Unused Engine Cleanup** in Settings & Engine Store.
+- **Groups & Color-Coded Tags**
+  Organize local instances and remote connections in collapsible Groups (with bulk Start/Stop) and filter instantaneously with 8 preset swatch tags.
+- **Multi-Tab Explorer & CRUD**
+  Inspect multiple local or remote collections side-by-side with a collection tree, schema/stats header, virtualized record table (`@tanstack/react-table` + `@tanstack/react-virtual`), right-side JSON payload drawer, and Create/Edit/Delete record & collection modals.
+- **Search Playground & Embedding Profiles**
+  Run raw vector similarity search, "Find Similar" from any row, visual or raw-JSON metadata filtering, latency/score histograms, and plain-text semantic search powered by **Ollama** or **OpenAI-compatible** embedding endpoints.
+- **2D/3D WebGL Visualizer & Import/Export/Backup**
+  Interactive WebGL scatter plots (`plotly.js-dist-min`) driven by Rust-side **PCA** and **UMAP** dimensionality reduction, JSONL/CSV batch import (with optional auto-embedding) & export, plus safe stop-before-zip **Backup / Restore**.
+- **OS Keyring Credential Security & Auto-Updater**
+  Remote DB API keys and embedding provider tokens are stored in Windows Credential Manager via the Rust `keyring` crate (never plaintext in SQLite). In-app updates use cryptographically signed `tauri-plugin-updater` GitHub Releases.
+
+---
+
+## Supported Engines
+
+### Tier 1 — Local Managed & Embedded Engines
+
+| Engine | Version in Manifest | Mode | Default Port |
+| --- | --- | --- | --- |
+| **Qdrant** | `1.20.2` / `1.20.1` | Native daemon (`qdrant.exe`) | `6333` (HTTP), `6334` (gRPC) |
+| **Chroma** | `1.4.4` / `1.4.3` | Native CLI daemon (`chroma.exe run`) | `8000` |
+| **PostgreSQL + pgvector** | `17.9-pgvector0.8.6` | Portable `postgres.exe` + `vector.dll` | `5432` |
+| **LanceDB** | `embedded-1.0` | Embedded `.lance` directory reader (`0 MB` daemon RAM) | None |
+
+### Tier 2 — Remote Connections
+
+Connect to self-hosted or managed clusters via unified `VectorDbAdapter` clients:
+
+- **Qdrant** (remote HTTP/HTTPS)
+- **Chroma** (remote HTTP/HTTPS)
+- **PostgreSQL + pgvector** (`postgresql://` with optional TLS via `tokio-postgres-rustls`)
+- **Pinecone**
+- **Weaviate**
+- **Milvus / Zilliz**
+- **Elasticsearch**
+- **Redis Stack** (RediSearch vector indexes)
+
+---
+
+## Quick Start (Development)
+
+**Prerequisites:** Node.js 22+, Rust stable toolchain (`x86_64-pc-windows-msvc`), and Microsoft Edge WebView2 Runtime (pre-installed on Windows 11).
+
+```powershell
+# Install root Tauri CLI and frontend packages
+npm install
+npm --prefix frontend install
+
+# Start Tauri desktop app in hot-reload dev mode
+npm run dev
+
+# Run backend Rust test suite
+npm run backend:test
+
+# Typecheck & bundle production frontend
+npm run frontend:build
+```
+
+To generate Windows installers locally (`EmbedBay_<ver>_x64-setup.exe` NSIS + `EmbedBay_<ver>_x64_en-US.msi` WiX), see [docs/development.md](docs/development.md) and [docs/releasing.md](docs/releasing.md).
+
+---
+
+## Repository Structure
+
+```text
+embedbay/
+├── frontend/                   # React 19 + TypeScript + Tailwind v4 UI
+├── backend/                    # Tauri v2 + Rust core (supervisors, adapters, analytics, commands)
+├── manifests/engines.json      # Engine download URLs, sizes, and SHA-256 checksums
+├── installer/                  # App icons + Windows NSIS/WiX custom installer hooks & fragments
+├── scripts/                    # Manifest updater & release verification helpers
+├── docs/                       # User, developer, architecture, engine, and release docs
+└── .github/workflows/          # Windows CI/CD release pipeline
+```
+
+---
+
+## Documentation
+
+- [Getting Started & User Guide](docs/getting-started.md) — Installing EmbedBay on Windows, running your first vector database, searching, visualizing, and backing up data.
+- [System Architecture](docs/architecture.md) — Platform isolation (`backend/src/platform/`), process supervision, SQLite + Keyring storage, analytics, and IPC design.
+- [Engines & Remote Adapters](docs/engines-and-adapters.md) — Tier 1 managed binaries, LanceDB/pgvector details, Tier 2 remote connection formats, and manifest updates.
+- [Developer Guide](docs/development.md) — Toolchain setup, tests, UI theme tokens, and local build workflow.
+- [Release & Packaging Guide](docs/releasing.md) — Updater keypair setup, NSIS/WiX installers, GitHub Actions CI/CD, and release verification.
