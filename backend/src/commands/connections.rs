@@ -4,7 +4,8 @@ use uuid::Uuid;
 use crate::adapters::embeddings::{self, EmbeddingTestResult};
 use crate::db::models::{
     CreateEmbeddingProfilePayload, CreateRemoteConnectionPayload, EmbeddingProfile,
-    RemoteConnection, UpdateEmbeddingProfilePayload, UpdateRemoteConnectionPayload,
+    RemoteConnection, TestEmbeddingProfileDraftPayload, UpdateEmbeddingProfilePayload,
+    UpdateRemoteConnectionPayload,
 };
 use crate::db::Database;
 use crate::platform::secrets;
@@ -218,6 +219,59 @@ pub async fn test_embedding_profile(
 }
 
 #[tauri::command]
+pub async fn test_embedding_profile_draft(
+    state: State<'_, AppState>,
+    payload: TestEmbeddingProfileDraftPayload,
+) -> Result<EmbeddingTestResult, String> {
+    let model_name = payload.model_name.trim().to_string();
+    if model_name.is_empty() {
+        return Err("Model name is required".to_string());
+    }
+
+    let api_key = if payload.provider == "openai_compatible" {
+        if let Some(key) = payload
+            .api_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            Some(key.to_string())
+        } else if let Some(ref pid) = payload.profile_id {
+            let existing = state
+                .db
+                .get_embedding_profile(pid)
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("Embedding profile '{}' not found", pid))?;
+            match &existing.secret_ref {
+                Some(ref_key) => secrets::get_secret(ref_key)?,
+                None => None,
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let temp_profile = EmbeddingProfile {
+        id: "draft".to_string(),
+        name: "Draft".to_string(),
+        provider: payload.provider,
+        model_name,
+        base_url: payload
+            .base_url
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
+        dimensions: None,
+        secret_ref: None,
+    };
+
+    embeddings::test_embedding_profile(&temp_profile, api_key.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn embed_texts(
     state: State<'_, AppState>,
     profile_id: String,
@@ -280,5 +334,78 @@ mod tests {
 
         delete_remote_connection_impl(&db, &conn.id).expect("delete remote conn");
         assert_eq!(secrets::get_secret(&ref_key).expect("after delete"), None);
+    }
+
+    #[test]
+    fn embedding_profile_crud_and_secret_clearing() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let db = Database::init(dir.path().to_path_buf()).expect("db init");
+
+        let profile = create_embedding_profile_impl(
+            &db,
+            CreateEmbeddingProfilePayload {
+                name: "OpenAI Small".to_string(),
+                provider: "openai_compatible".to_string(),
+                model_name: "text-embedding-3-small".to_string(),
+                base_url: Some("https://api.openai.com/v1".to_string()),
+                dimensions: Some(1536),
+                api_key: Some("sk-embed-secret-xyz".to_string()),
+            },
+        )
+        .expect("create embedding profile");
+
+        let ref_key = profile.secret_ref.clone().expect("secret_ref present");
+        assert!(ref_key.starts_with("embed_profile:"));
+        assert_eq!(
+            secrets::get_secret(&ref_key).expect("read keyring"),
+            Some("sk-embed-secret-xyz".to_string())
+        );
+
+        let raw_db_bytes = std::fs::read(db.db_path()).expect("read sqlite file");
+        let raw_str = String::from_utf8_lossy(&raw_db_bytes);
+        assert!(
+            !raw_str.contains("sk-embed-secret-xyz"),
+            "Embedding API key leaked into SQLite database!"
+        );
+
+        // Omitting api_key in JSON must deserialize to None and keep existing keyring secret intact.
+        let keep_key_payload: UpdateEmbeddingProfilePayload =
+            serde_json::from_str(r#"{"name": "OpenAI Renamed"}"#).expect("deserialize omit");
+        assert!(keep_key_payload.api_key.is_none());
+        let updated_keep = update_embedding_profile_impl(&db, &profile.id, keep_key_payload)
+            .expect("update keeping secret");
+        assert_eq!(updated_keep.name, "OpenAI Renamed");
+        assert_eq!(updated_keep.dimensions, Some(1536));
+        assert_eq!(updated_keep.secret_ref.as_deref(), Some(ref_key.as_str()));
+        assert_eq!(
+            secrets::get_secret(&ref_key).expect("read kept keyring"),
+            Some("sk-embed-secret-xyz".to_string())
+        );
+
+        // Explicit JSON null must deserialize to Some(None) and clear dimensions & keyring secret.
+        let clear_payload: UpdateEmbeddingProfilePayload =
+            serde_json::from_str(r#"{"dimensions": null, "api_key": null}"#)
+                .expect("deserialize nulls");
+        assert_eq!(clear_payload.dimensions, Some(None));
+        assert_eq!(clear_payload.api_key, Some(None));
+        let updated_clear = update_embedding_profile_impl(&db, &profile.id, clear_payload)
+            .expect("update clearing secret");
+        assert_eq!(updated_clear.dimensions, None);
+        assert_eq!(updated_clear.secret_ref, None);
+        assert_eq!(secrets::get_secret(&ref_key).expect("cleared keyring"), None);
+
+        // Re-save a secret and ensure delete removes both profile and keyring secret.
+        let rekey_payload: UpdateEmbeddingProfilePayload =
+            serde_json::from_str(r#"{"api_key": "sk-new-key"}"#).expect("deserialize new key");
+        let updated_rekey = update_embedding_profile_impl(&db, &profile.id, rekey_payload)
+            .expect("update with new key");
+        let new_ref = updated_rekey.secret_ref.expect("new secret_ref");
+        assert_eq!(
+            secrets::get_secret(&new_ref).expect("read new keyring"),
+            Some("sk-new-key".to_string())
+        );
+
+        delete_embedding_profile_impl(&db, &profile.id).expect("delete embedding profile");
+        assert_eq!(secrets::get_secret(&new_ref).expect("after delete"), None);
     }
 }

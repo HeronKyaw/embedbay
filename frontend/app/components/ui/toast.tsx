@@ -1,5 +1,7 @@
+import * as React from "react";
 import { create } from "zustand";
 import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
+import { formatUserError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
 export type ToastKind = "success" | "error" | "info";
@@ -34,7 +36,11 @@ export const toast = {
   success: (title: string, description?: string) =>
     useToastStore.getState().push({ kind: "success", title, description }),
   error: (title: string, description?: string) =>
-    useToastStore.getState().push({ kind: "error", title, description }),
+    useToastStore.getState().push({
+      kind: "error",
+      title,
+      description: description ? formatUserError(description) : undefined,
+    }),
   info: (title: string, description?: string) =>
     useToastStore.getState().push({ kind: "info", title, description }),
 };
@@ -42,13 +48,40 @@ export const toast = {
 export function ToastViewport() {
   const toasts = useToastStore((s) => s.toasts);
   const dismiss = useToastStore((s) => s.dismiss);
+  const popoverRef = React.useRef<HTMLDivElement | null>(null);
+  const latestId = toasts[toasts.length - 1]?.id ?? null;
 
-  if (toasts.length === 0) return null;
+  React.useEffect(() => {
+    const el = popoverRef.current;
+    if (!el) return;
+
+    if (toasts.length > 0) {
+      // Re-promote to the top of the browser Top Layer so toasts sit above open <dialog> modals.
+      try {
+        el.hidePopover();
+      } catch {
+        // Ignore if not currently open
+      }
+      try {
+        el.showPopover();
+      } catch {
+        // Ignore if Popover API is unavailable
+      }
+    } else {
+      try {
+        el.hidePopover();
+      } catch {
+        // Ignore if already hidden
+      }
+    }
+  }, [toasts.length, latestId]);
 
   return (
     <div
+      ref={popoverRef}
+      popover="manual"
       aria-live="polite"
-      className="pointer-events-none fixed right-4 bottom-4 z-50 flex w-80 flex-col gap-2"
+      className="pointer-events-none fixed inset-auto right-4 bottom-4 z-[100] m-0 flex w-80 flex-col gap-2 overflow-visible border-0 bg-transparent p-0"
     >
       {toasts.map((item) => (
         <div
@@ -74,7 +107,7 @@ export function ToastViewport() {
               {item.title}
             </div>
             {item.description && (
-              <div className="mt-0.5 break-words text-[11px] text-[var(--text-secondary)]">
+              <div className="mt-0.5 line-clamp-3 break-words text-[11px] text-[var(--text-secondary)]">
                 {item.description}
               </div>
             )}

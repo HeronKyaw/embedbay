@@ -3,9 +3,166 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/embedbay-icon.svg" />
     <title>EmbedBay</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("embedbay-theme");
+          var theme = t === "light" || t === "dark" ? t : "dark";
+          var root = document.documentElement;
+          root.dataset.theme = theme;
+          root.classList.remove("dark", "light");
+          root.classList.add(theme);
+        } catch (e) {}
+      })();
+    </script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background-color: #090c12;
+        color: #f1f5f9;
+        font-family: "Segoe UI Variable", -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+        overflow: hidden;
+      }
+
+      html[data-theme="light"],
+      html[data-theme="light"] body {
+        background-color: #f8fafc;
+        color: #0f172a;
+      }
+
+      #embedbay-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        background-color: #090c12;
+        color: #f1f5f9;
+        opacity: 1;
+        transition: opacity 220ms ease-out;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      html[data-theme="light"] #embedbay-splash {
+        background-color: #f8fafc;
+        color: #0f172a;
+      }
+
+      #embedbay-splash.splash-hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .splash-brand {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .splash-title {
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1;
+      }
+
+      .splash-subtitle {
+        font-size: 12px;
+        color: #94a3b8;
+        line-height: 1.2;
+      }
+
+      html[data-theme="light"] .splash-subtitle {
+        color: #475569;
+      }
+
+      .splash-track {
+        width: 168px;
+        height: 3px;
+        border-radius: 9999px;
+        background-color: #1e2738;
+        overflow: hidden;
+        margin-top: 4px;
+      }
+
+      html[data-theme="light"] .splash-track {
+        background-color: #e2e8f0;
+      }
+
+      .splash-bar {
+        width: 45%;
+        height: 100%;
+        border-radius: 9999px;
+        background: linear-gradient(90deg, #14b8a6, #38bdf8);
+        animation: embedbay-splash-slide 1.15s ease-in-out infinite;
+      }
+
+      @keyframes embedbay-splash-slide {
+        0% {
+          transform: translateX(-110%);
+        }
+        100% {
+          transform: translateX(260%);
+        }
+      }
+    </style>
   </head>
   <body class="bg-[var(--bg-canvas)] text-[var(--text-primary)] antialiased selection:bg-[var(--accent-primary)]/25">
+    <div id="embedbay-splash" aria-label="Loading EmbedBay">
+      <div class="splash-brand">
+        <svg width="56" height="56" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <defs>
+            <linearGradient id="sp-bg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#1E2530" />
+              <stop offset="50%" stop-color="#131822" />
+              <stop offset="100%" stop-color="#0B0F16" />
+            </linearGradient>
+            <linearGradient id="sp-rim" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#94A3B8" stop-opacity="0.82" />
+              <stop offset="50%" stop-color="#475569" stop-opacity="0.48" />
+              <stop offset="100%" stop-color="#334155" stop-opacity="0.68" />
+            </linearGradient>
+            <linearGradient id="sp-teal" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#2DD4BF" />
+              <stop offset="100%" stop-color="#14B8A6" />
+            </linearGradient>
+            <linearGradient id="sp-cyan" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#60A5FA" />
+              <stop offset="45%" stop-color="#38BDF8" />
+              <stop offset="100%" stop-color="#0EA5E9" />
+            </linearGradient>
+            <linearGradient id="sp-bay" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#2DD4BF" />
+              <stop offset="100%" stop-color="#0D9488" />
+            </linearGradient>
+          </defs>
+          <rect x="48" y="48" width="928" height="928" rx="220" ry="220" fill="url(#sp-bg)" />
+          <rect x="56" y="56" width="912" height="912" rx="212" ry="212" fill="none" stroke="url(#sp-rim)" stroke-width="16" />
+          <path d="M 358 456 L 292 456 Q 264 456 264 484 L 264 700 Q 264 728 292 728 L 732 728 Q 760 728 760 700 L 760 484 Q 760 456 732 456 L 666 456" fill="none" stroke="url(#sp-bay)" stroke-width="52" stroke-linecap="round" stroke-linejoin="round" />
+          <path d="M 378 494 L 512 574 L 646 494 L 604 468 L 512 522 L 420 468 Z" fill="url(#sp-teal)" stroke="url(#sp-teal)" stroke-width="10" stroke-linejoin="round" />
+          <path d="M 378 424 L 512 504 L 646 424 L 604 398 L 512 452 L 420 398 Z" fill="url(#sp-cyan)" stroke="url(#sp-cyan)" stroke-width="10" stroke-linejoin="round" />
+          <path d="M 512 280 L 646 356 L 512 432 L 378 356 Z" fill="url(#sp-teal)" stroke="url(#sp-teal)" stroke-width="12" stroke-linejoin="round" />
+          <rect x="358" y="576" width="84" height="28" rx="14" fill="#14B8A6" />
+          <rect x="358" y="624" width="202" height="28" rx="14" fill="#14B8A6" />
+          <rect x="588" y="576" width="80" height="28" rx="14" fill="#38BDF8" />
+        </svg>
+        <div class="splash-title">EmbedBay</div>
+        <div class="splash-subtitle">Starting local vector workspace...</div>
+      </div>
+      <div class="splash-track">
+        <div class="splash-bar"></div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/app/main.tsx"></script>
   </body>

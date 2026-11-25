@@ -1,6 +1,6 @@
 export type ThemeMode = "dark" | "light";
 
-export type ActivitySection = "explorer" | "runtimes" | "store" | "settings";
+export type ActivitySection = "explorer" | "runtimes" | "store";
 
 export interface PlatformInfo {
   os: string;

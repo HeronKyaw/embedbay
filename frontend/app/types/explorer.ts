@@ -81,6 +81,14 @@ export interface UpdateEmbeddingProfilePayload {
   api_key?: string | null;
 }
 
+export interface TestEmbeddingProfileDraftPayload {
+  profile_id?: string | null;
+  provider: string;
+  model_name: string;
+  base_url?: string | null;
+  api_key?: string | null;
+}
+
 export interface EmbeddingTestResult {
   ok: boolean;
   dimensions: number;

@@ -27,17 +27,18 @@ export function applyThemeToDom(theme: ThemeMode): void {
 interface AppState {
   theme: ThemeMode;
   activeSection: ActivitySection;
+  settingsOpen: boolean;
   commandPaletteOpen: boolean;
-  sidebarOpen: boolean;
   appStatus: AppStatus | null;
   statusLoading: boolean;
   statusError: string | null;
   setTheme: (theme: ThemeMode) => void;
   toggleTheme: () => void;
   setActiveSection: (section: ActivitySection) => void;
+  setSettingsOpen: (open: boolean) => void;
+  toggleSettings: () => void;
   setCommandPaletteOpen: (open: boolean) => void;
   toggleCommandPalette: () => void;
-  setSidebarOpen: (open: boolean) => void;
   setAppStatus: (status: AppStatus | null) => void;
   setStatusLoading: (loading: boolean) => void;
   setStatusError: (error: string | null) => void;
@@ -48,9 +49,9 @@ applyThemeToDom(initialTheme);
 
 export const useAppStore = create<AppState>((set) => ({
   theme: initialTheme,
-  activeSection: "runtimes",
+  activeSection: "explorer",
+  settingsOpen: false,
   commandPaletteOpen: false,
-  sidebarOpen: true,
   appStatus: null,
   statusLoading: true,
   statusError: null,
@@ -75,10 +76,12 @@ export const useAppStore = create<AppState>((set) => ({
       return { theme: next };
     }),
   setActiveSection: (activeSection) => set({ activeSection }),
+  setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+  toggleSettings: () =>
+    set((state) => ({ settingsOpen: !state.settingsOpen })),
   setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
   toggleCommandPalette: () =>
     set((state) => ({ commandPaletteOpen: !state.commandPaletteOpen })),
-  setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
   setAppStatus: (appStatus) => set({ appStatus }),
   setStatusLoading: (statusLoading) => set({ statusLoading }),
   setStatusError: (statusError) => set({ statusError }),

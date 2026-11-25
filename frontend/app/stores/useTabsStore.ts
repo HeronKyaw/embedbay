@@ -3,7 +3,10 @@ import {
   listEmbeddingProfiles,
   listRemoteConnections,
 } from "@/ipc/connections";
+import { listCollections } from "@/ipc/explorer";
+import { formatUserError } from "@/lib/errors";
 import type {
+  CollectionSummary,
   ConnectionTarget,
   EmbeddingProfile,
   FilterSpec,
@@ -48,10 +51,31 @@ interface TabsState {
   embeddingProfiles: EmbeddingProfile[];
   remoteModalOpen: boolean;
   editingRemoteConnection: RemoteConnection | null;
+  // Unified Explorer tree state
+  expandedConnections: Record<string, boolean>;
+  collectionsByConnection: Record<string, CollectionSummary[]>;
+  loadingConnections: Record<string, boolean>;
+  connectionErrors: Record<string, string | null>;
 
   refreshConnectionsAndProfiles: () => Promise<void>;
   openRemoteModal: (editing?: RemoteConnection | null) => void;
   closeRemoteModal: () => void;
+  refreshConnectionCollections: (
+    connectionKey: string,
+    target: ConnectionTarget,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  clearConnectionError: (connectionKey: string) => void;
+  toggleConnectionExpanded: (
+    connectionKey: string,
+    target: ConnectionTarget,
+    ready: boolean,
+  ) => Promise<void>;
+  expandConnection: (
+    connectionKey: string,
+    target: ConnectionTarget,
+    ready: boolean,
+  ) => Promise<void>;
+  clearConnectionCollections: (connectionKey: string) => void;
   openCollectionTab: (
     connectionKey: string,
     target: ConnectionTarget,
@@ -74,7 +98,47 @@ interface TabsState {
   openLogsTab: (instanceId: string, name: string) => void;
   setActiveTabId: (id: string | null) => void;
   closeTab: (id: string) => void;
+  closeTabsForConnection: (connectionKey: string) => void;
+  closeTabsForCollection: (connectionKey: string, collection: string) => void;
   updateTab: (id: string, patch: Partial<WorkspaceTab>) => void;
+}
+
+function removeTabsMatching(
+  tabs: WorkspaceTab[],
+  activeTabId: string | null,
+  predicate: (tab: WorkspaceTab) => boolean,
+): { tabs: WorkspaceTab[]; activeTabId: string | null } {
+  const activeTab = activeTabId
+    ? (tabs.find((t) => t.id === activeTabId) ?? null)
+    : null;
+  const sameConnBefore = activeTab
+    ? tabs.filter((t) => t.connectionKey === activeTab.connectionKey)
+    : [];
+  const activeSameConnIndex = activeTab
+    ? sameConnBefore.findIndex((t) => t.id === activeTab.id)
+    : -1;
+
+  const nextTabs = tabs.filter((t) => !predicate(t));
+  let nextActive = activeTabId;
+
+  if (activeTab && !nextTabs.some((t) => t.id === activeTab.id)) {
+    const sameConnAfter = nextTabs.filter(
+      (t) => t.connectionKey === activeTab.connectionKey,
+    );
+    if (sameConnAfter.length === 0) {
+      nextActive = null;
+    } else {
+      nextActive =
+        sameConnAfter[
+          Math.min(
+            sameConnAfter.length - 1,
+            Math.max(0, activeSameConnIndex - 1),
+          )
+        ].id;
+    }
+  }
+
+  return { tabs: nextTabs, activeTabId: nextActive };
 }
 
 function makeDefaultTab(
@@ -109,6 +173,10 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   embeddingProfiles: [],
   remoteModalOpen: false,
   editingRemoteConnection: null,
+  expandedConnections: {},
+  collectionsByConnection: {},
+  loadingConnections: {},
+  connectionErrors: {},
 
   refreshConnectionsAndProfiles: async () => {
     const [remoteConnections, embeddingProfiles] = await Promise.all([
@@ -123,6 +191,80 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 
   closeRemoteModal: () =>
     set({ remoteModalOpen: false, editingRemoteConnection: null }),
+
+  refreshConnectionCollections: async (connectionKey, target) => {
+    set((s) => ({
+      loadingConnections: { ...s.loadingConnections, [connectionKey]: true },
+      connectionErrors: { ...s.connectionErrors, [connectionKey]: null },
+    }));
+    try {
+      const list = await listCollections(target);
+      set((s) => ({
+        collectionsByConnection: {
+          ...s.collectionsByConnection,
+          [connectionKey]: list,
+        },
+        loadingConnections: { ...s.loadingConnections, [connectionKey]: false },
+        connectionErrors: { ...s.connectionErrors, [connectionKey]: null },
+      }));
+      return { ok: true };
+    } catch (err: unknown) {
+      const message = formatUserError(err);
+      set((s) => ({
+        loadingConnections: { ...s.loadingConnections, [connectionKey]: false },
+        connectionErrors: { ...s.connectionErrors, [connectionKey]: message },
+      }));
+      return { ok: false, error: message };
+    }
+  },
+
+  clearConnectionError: (connectionKey) =>
+    set((s) => {
+      if (!(connectionKey in s.connectionErrors)) return s;
+      const errorsCopy = { ...s.connectionErrors };
+      delete errorsCopy[connectionKey];
+      return { connectionErrors: errorsCopy };
+    }),
+
+  toggleConnectionExpanded: async (connectionKey, target, ready) => {
+    const nextExpanded = !get().expandedConnections[connectionKey];
+    set((s) => ({
+      expandedConnections: {
+        ...s.expandedConnections,
+        [connectionKey]: nextExpanded,
+      },
+    }));
+    if (nextExpanded && ready) {
+      await get().refreshConnectionCollections(connectionKey, target);
+    }
+  },
+
+  expandConnection: async (connectionKey, target, ready) => {
+    set((s) => ({
+      expandedConnections: {
+        ...s.expandedConnections,
+        [connectionKey]: true,
+      },
+    }));
+    if (ready) {
+      await get().refreshConnectionCollections(connectionKey, target);
+    }
+  },
+
+  clearConnectionCollections: (connectionKey) =>
+    set((s) => {
+      const collectionsCopy = { ...s.collectionsByConnection };
+      const errorsCopy = { ...s.connectionErrors };
+      const loadingCopy = { ...s.loadingConnections };
+      delete collectionsCopy[connectionKey];
+      delete errorsCopy[connectionKey];
+      delete loadingCopy[connectionKey];
+      return {
+        collectionsByConnection: collectionsCopy,
+        connectionErrors: errorsCopy,
+        loadingConnections: loadingCopy,
+      };
+    }),
 
   openCollectionTab: (connectionKey, target, collection, labelPrefix) => {
     const id = `col:${connectionKey}:${collection}`;
@@ -219,19 +361,25 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   setActiveTabId: (activeTabId) => set({ activeTabId }),
 
   closeTab: (id) =>
-    set((s) => {
-      const idx = s.tabs.findIndex((t) => t.id === id);
-      const nextTabs = s.tabs.filter((t) => t.id !== id);
-      let nextActive = s.activeTabId;
-      if (s.activeTabId === id) {
-        if (nextTabs.length === 0) {
-          nextActive = null;
-        } else {
-          nextActive = nextTabs[Math.max(0, idx - 1)].id;
-        }
-      }
-      return { tabs: nextTabs, activeTabId: nextActive };
-    }),
+    set((s) => removeTabsMatching(s.tabs, s.activeTabId, (t) => t.id === id)),
+
+  closeTabsForConnection: (connectionKey) =>
+    set((s) =>
+      removeTabsMatching(
+        s.tabs,
+        s.activeTabId,
+        (t) => t.connectionKey === connectionKey,
+      ),
+    ),
+
+  closeTabsForCollection: (connectionKey, collection) =>
+    set((s) =>
+      removeTabsMatching(
+        s.tabs,
+        s.activeTabId,
+        (t) => t.connectionKey === connectionKey && t.collection === collection,
+      ),
+    ),
 
   updateTab: (id, patch) =>
     set((s) => ({

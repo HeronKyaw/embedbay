@@ -6,7 +6,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{
+    CpuRefreshKind, Disks, MemoryRefreshKind, Pid, ProcessRefreshKind, ProcessesToUpdate,
+    RefreshKind, System,
+};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::sync::Mutex;
@@ -16,7 +19,10 @@ use crate::db::Database;
 use crate::engines::{self, HealthCheckKind};
 use crate::platform;
 use crate::supervisor::logs::InstanceLogStore;
-use crate::supervisor::metrics::{dir_size_bytes, InstanceMetrics, InstanceStatus, SystemMetricsSummary};
+use crate::supervisor::metrics::{
+    dir_size_bytes, select_disk_space_for_path, HostResourceMetrics, InstanceMetrics,
+    InstanceStatus, SystemMetricsSummary,
+};
 use crate::supervisor::EventSink;
 
 const MAX_BACKOFF_RESTARTS: u32 = 5;
@@ -83,7 +89,26 @@ pub struct ProcessManager {
     db: Arc<Database>,
     logs: Arc<InstanceLogStore>,
     runtimes: Mutex<HashMap<String, ManagedRuntime>>,
+    host_metrics: std::sync::RwLock<HostResourceMetrics>,
     event_sink: std::sync::RwLock<Option<Arc<dyn EventSink>>>,
+}
+
+fn sample_initial_host_metrics(data_root: &Path) -> HostResourceMetrics {
+    let sys = System::new_with_specifics(
+        RefreshKind::nothing()
+            .with_cpu(CpuRefreshKind::nothing().with_cpu_usage())
+            .with_memory(MemoryRefreshKind::nothing().with_ram()),
+    );
+    let disks = Disks::new_with_refreshed_list();
+    let (disk_available_bytes, disk_total_bytes) = select_disk_space_for_path(&disks, data_root);
+    HostResourceMetrics {
+        cpu_percent: 0.0,
+        cpu_cores: sys.cpus().len(),
+        memory_used_bytes: sys.used_memory(),
+        memory_total_bytes: sys.total_memory(),
+        disk_available_bytes,
+        disk_total_bytes,
+    }
 }
 
 fn now_unix_secs() -> i64 {
@@ -131,10 +156,12 @@ pub fn suggest_available_port(db: &Database, host: &str, start_port: u16) -> Res
 
 impl ProcessManager {
     pub fn new(db: Arc<Database>, logs: Arc<InstanceLogStore>) -> Self {
+        let initial_host = sample_initial_host_metrics(db.data_root());
         Self {
             db,
             logs,
             runtimes: Mutex::new(HashMap::new()),
+            host_metrics: std::sync::RwLock::new(initial_host),
             event_sink: std::sync::RwLock::new(None),
         }
     }
@@ -889,6 +916,8 @@ impl ProcessManager {
 
         let mut map = HashMap::new();
         let mut total_ram_bytes = 0u64;
+        let mut total_cpu_percent = 0.0f32;
+        let mut total_disk_bytes = 0u64;
         let mut running_count = 0usize;
 
         for inst in instances {
@@ -908,17 +937,31 @@ impl ProcessManager {
                 rt.disk_sampled_at = Some(Instant::now());
             }
 
+            total_disk_bytes = total_disk_bytes.saturating_add(rt.disk_bytes);
+
             if rt.status == InstanceStatus::Running {
                 running_count += 1;
                 total_ram_bytes = total_ram_bytes.saturating_add(rt.ram_bytes);
+                if rt.cpu_percent.is_finite() {
+                    total_cpu_percent += rt.cpu_percent;
+                }
             }
 
             map.insert(inst.id.clone(), build_metrics(&inst, rt));
         }
 
+        let host = self
+            .host_metrics
+            .read()
+            .map(|h| h.clone())
+            .unwrap_or_default();
+
         Ok(SystemMetricsSummary {
             total_ram_bytes,
+            total_cpu_percent: total_cpu_percent.clamp(0.0, 100.0),
+            total_disk_bytes,
             running_count,
+            host,
             instances: map,
         })
     }
@@ -926,9 +969,44 @@ impl ProcessManager {
     pub async fn spawn_background_monitors(self: Arc<Self>) {
         let pm_metrics = Arc::clone(&self);
         tokio::spawn(async move {
-            let mut sys = System::new();
+            let mut sys = System::new_with_specifics(
+                RefreshKind::nothing()
+                    .with_cpu(CpuRefreshKind::nothing().with_cpu_usage())
+                    .with_memory(MemoryRefreshKind::nothing().with_ram()),
+            );
+            let mut disks = Disks::new_with_refreshed_list();
+            let mut last_disk_refresh = Instant::now();
+
             loop {
                 tokio::time::sleep(Duration::from_secs(2)).await;
+
+                sys.refresh_cpu_usage();
+                sys.refresh_memory_specifics(MemoryRefreshKind::nothing().with_ram());
+                if last_disk_refresh.elapsed() >= Duration::from_secs(30) {
+                    disks.refresh(true);
+                    last_disk_refresh = Instant::now();
+                }
+
+                let cpu_cores = sys.cpus().len();
+                let raw_cpu = sys.global_cpu_usage();
+                let cpu_percent = if raw_cpu.is_finite() {
+                    raw_cpu.clamp(0.0, 100.0)
+                } else {
+                    0.0
+                };
+                let (disk_available_bytes, disk_total_bytes) =
+                    select_disk_space_for_path(&disks, pm_metrics.db.data_root());
+
+                if let Ok(mut host_guard) = pm_metrics.host_metrics.write() {
+                    *host_guard = HostResourceMetrics {
+                        cpu_percent,
+                        cpu_cores,
+                        memory_used_bytes: sys.used_memory(),
+                        memory_total_bytes: sys.total_memory(),
+                        disk_available_bytes,
+                        disk_total_bytes,
+                    };
+                }
 
                 let pids: Vec<(String, Pid)> = {
                     let guard = pm_metrics.runtimes.lock().await;
@@ -953,12 +1031,18 @@ impl ProcessManager {
                         ProcessRefreshKind::nothing().with_cpu().with_memory(),
                     );
 
+                    let core_divisor = cpu_cores.max(1) as f32;
                     let mut guard = pm_metrics.runtimes.lock().await;
                     for (id, pid) in &pids {
                         if let (Some(rt), Some(proc_info)) = (guard.get_mut(id), sys.process(*pid))
                         {
                             rt.ram_bytes = proc_info.memory();
-                            rt.cpu_percent = proc_info.cpu_usage();
+                            let normalized_cpu = proc_info.cpu_usage() / core_divisor;
+                            rt.cpu_percent = if normalized_cpu.is_finite() {
+                                normalized_cpu.clamp(0.0, 100.0)
+                            } else {
+                                0.0
+                            };
                         }
                     }
                 }

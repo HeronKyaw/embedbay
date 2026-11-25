@@ -6,6 +6,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use serde_json::{json, Value};
 
 use crate::adapters::{
+    format_http_status_error, format_invalid_json_error, format_reqwest_error,
     http_client_for_url, AdapterError, BrowseRecordsRequest, BrowseRecordsResponse,
     CollectionSchema, CollectionSummary, ConnectionTestResult, CreateCollectionRequest,
     FilterCondition, FilterLogic, FilterSpec, PayloadFieldSchema, SearchRequest, SearchResponse,
@@ -69,17 +70,21 @@ impl MilvusAdapter {
             .json(&body)
             .send()
             .await
-            .map_err(|e| AdapterError::Http(e.to_string()))?;
+            .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
         let status = resp.status();
-        let text = resp.text().await.map_err(|e| AdapterError::Http(e.to_string()))?;
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
         if !status.is_success() {
-            return Err(AdapterError::Api(format!(
-                "Milvus {} returned {}: {}",
-                path, status, text
+            return Err(AdapterError::Api(format_http_status_error(
+                "Milvus",
+                status,
+                &text,
             )));
         }
         let val: Value = serde_json::from_str(&text)
-            .map_err(|e| AdapterError::Api(format!("Invalid Milvus JSON: {}", e)))?;
+            .map_err(|_| AdapterError::Api(format_invalid_json_error("Milvus", &text)))?;
         if let Some(code) = val.get("code").and_then(|c| c.as_i64()) {
             if code != 0 {
                 let msg = val

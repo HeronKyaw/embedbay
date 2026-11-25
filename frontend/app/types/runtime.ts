@@ -132,9 +132,21 @@ export interface InstanceMetrics {
   last_activity_at: number;
 }
 
+export interface HostResourceMetrics {
+  cpu_percent: number;
+  cpu_cores: number;
+  memory_used_bytes: number;
+  memory_total_bytes: number;
+  disk_available_bytes: number;
+  disk_total_bytes: number;
+}
+
 export interface SystemMetricsSummary {
   total_ram_bytes: number;
+  total_cpu_percent: number;
+  total_disk_bytes: number;
   running_count: number;
+  host: HostResourceMetrics;
   instances: Record<string, InstanceMetrics>;
 }
 

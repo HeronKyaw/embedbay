@@ -6,6 +6,7 @@ import type {
   EmbeddingProfile,
   EmbeddingTestResult,
   RemoteConnection,
+  TestEmbeddingProfileDraftPayload,
   UpdateEmbeddingProfilePayload,
   UpdateRemoteConnectionPayload,
 } from "@/types/explorer";
@@ -58,6 +59,14 @@ export async function testEmbeddingProfile(
   id: string,
 ): Promise<EmbeddingTestResult> {
   return invoke<EmbeddingTestResult>("test_embedding_profile", { id });
+}
+
+export async function testEmbeddingProfileDraft(
+  payload: TestEmbeddingProfileDraftPayload,
+): Promise<EmbeddingTestResult> {
+  return invoke<EmbeddingTestResult>("test_embedding_profile_draft", {
+    payload,
+  });
 }
 
 export async function embedTexts(

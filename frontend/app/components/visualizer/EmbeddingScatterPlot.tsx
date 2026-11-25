@@ -237,7 +237,7 @@ export function EmbeddingScatterPlot({ tab }: { tab: WorkspaceTab }) {
     <div className="flex min-h-0 flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Controls Toolbar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 py-2.5">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="accent">
               <ScatterChart className="h-3 w-3" />
@@ -259,12 +259,12 @@ export function EmbeddingScatterPlot({ tab }: { tab: WorkspaceTab }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <div className="inline-flex rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] p-0.5 text-[11px]">
+            <div className="inline-flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-0.5 text-[11px]">
               <button
                 type="button"
                 onClick={() => setMethod("pca")}
                 className={cn(
-                  "rounded px-2 py-0.5 font-medium cursor-pointer",
+                  "rounded-md px-2 py-0.5 font-medium cursor-pointer",
                   method === "pca"
                     ? "bg-[var(--accent-primary)] text-slate-950 font-semibold"
                     : "text-[var(--text-secondary)]",
@@ -276,7 +276,7 @@ export function EmbeddingScatterPlot({ tab }: { tab: WorkspaceTab }) {
                 type="button"
                 onClick={() => setMethod("umap")}
                 className={cn(
-                  "rounded px-2 py-0.5 font-medium cursor-pointer",
+                  "rounded-md px-2 py-0.5 font-medium cursor-pointer",
                   method === "umap"
                     ? "bg-[var(--accent-ai)] text-white"
                     : "text-[var(--text-secondary)]",
@@ -286,12 +286,12 @@ export function EmbeddingScatterPlot({ tab }: { tab: WorkspaceTab }) {
               </button>
             </div>
 
-            <div className="inline-flex rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] p-0.5 text-[11px]">
+            <div className="inline-flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-0.5 text-[11px]">
               <button
                 type="button"
                 onClick={() => setDims(2)}
                 className={cn(
-                  "rounded px-2 py-0.5 font-mono cursor-pointer",
+                  "rounded-md px-2 py-0.5 font-mono cursor-pointer",
                   dims === 2
                     ? "bg-[var(--bg-elevated)] text-[var(--text-primary)] font-semibold"
                     : "text-[var(--text-muted)]",
@@ -303,7 +303,7 @@ export function EmbeddingScatterPlot({ tab }: { tab: WorkspaceTab }) {
                 type="button"
                 onClick={() => setDims(3)}
                 className={cn(
-                  "rounded px-2 py-0.5 font-mono cursor-pointer",
+                  "rounded-md px-2 py-0.5 font-mono cursor-pointer",
                   dims === 3
                     ? "bg-[var(--bg-elevated)] text-[var(--text-primary)] font-semibold"
                     : "text-[var(--text-muted)]",
@@ -316,7 +316,7 @@ export function EmbeddingScatterPlot({ tab }: { tab: WorkspaceTab }) {
             <select
               value={sampleSize}
               onChange={(e) => setSampleSize(Number(e.target.value))}
-              className="h-7 rounded border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2 font-mono text-[11px] text-[var(--text-primary)]"
+              className="h-7 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 font-mono text-[11px] text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none"
               title="Sample size"
             >
               <option value={100}>100 pts</option>
@@ -329,7 +329,7 @@ export function EmbeddingScatterPlot({ tab }: { tab: WorkspaceTab }) {
             <select
               value={colorField}
               onChange={(e) => setColorField(e.target.value)}
-              className="h-7 rounded border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2 text-[11px] text-[var(--text-primary)]"
+              className="h-7 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 text-[11px] text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none"
               title="Color points by metadata field"
             >
               <option value="">Color: Uniform</option>

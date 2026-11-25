@@ -7,6 +7,7 @@ export interface DialogProps {
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: string;
+  icon?: React.ReactNode;
   maxWidthClass?: string;
   children: React.ReactNode;
 }
@@ -16,6 +17,7 @@ export function Dialog({
   onOpenChange,
   title,
   description,
+  icon,
   maxWidthClass = "w-[540px]",
   children,
 }: DialogProps) {
@@ -49,17 +51,20 @@ export function Dialog({
       {open && (
         <div
           className={cn(
-            "flex max-h-[88vh] flex-col overflow-hidden rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] text-[var(--text-primary)] shadow-2xl",
+            "flex max-h-[88vh] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-[var(--border-strong)] bg-[var(--bg-canvas)] text-[var(--text-primary)] shadow-2xl",
             maxWidthClass,
           )}
         >
-          <div className="flex items-start justify-between gap-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-5 py-3.5">
-            <div>
-              <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                {title}
-              </h2>
+          <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                {icon}
+                <h2 className="text-base font-semibold leading-tight tracking-tight text-[var(--text-primary)]">
+                  {title}
+                </h2>
+              </div>
               {description && (
-                <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
                   {description}
                 </p>
               )}
@@ -68,12 +73,14 @@ export function Dialog({
               type="button"
               onClick={() => onOpenChange(false)}
               aria-label="Close modal"
-              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] cursor-pointer"
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] cursor-pointer"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+          <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-6 pb-5 pt-1">
+            {children}
+          </div>
         </div>
       )}
     </dialog>

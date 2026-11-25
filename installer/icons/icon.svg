@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" fill="none">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1C2638" />
+      <stop offset="100%" stop-color="#0B101B" />
+    </linearGradient>
+
+    <linearGradient id="rimGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#586C8A" stop-opacity="0.75" />
+      <stop offset="100%" stop-color="#1E293B" stop-opacity="0.55" />
+    </linearGradient>
+
+    <linearGradient id="tealLayer" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2DD4BF" />
+      <stop offset="100%" stop-color="#14B8A6" />
+    </linearGradient>
+
+    <linearGradient id="cyanLayer" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#60A5FA" />
+      <stop offset="100%" stop-color="#0EA5E9" />
+    </linearGradient>
+
+    <linearGradient id="bayGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2DD4BF" />
+      <stop offset="100%" stop-color="#0D9488" />
+    </linearGradient>
+  </defs>
+
+  <rect x="36" y="36" width="952" height="952" rx="210" ry="210" fill="url(#bgGrad)" />
+  <rect x="40" y="40" width="944" height="944" rx="206" ry="206" stroke="url(#rimGrad)" stroke-width="10" />
+
+  <path d="M 304 468 L 232 468 Q 188 468 188 512 L 188 730 Q 188 774 232 774 L 792 774 Q 836 774 836 730 L 836 512 Q 836 468 792 468 L 720 468"
+        stroke="url(#bayGrad)"
+        stroke-width="64"
+        stroke-linecap="round"
+        stroke-linejoin="round" />
+
+  <path d="M 332 494 L 512 592 L 692 494 L 638 464 L 512 532 L 386 464 Z" fill="url(#tealLayer)" />
+  <path d="M 332 392 L 512 490 L 692 392 L 638 362 L 512 430 L 386 362 Z" fill="url(#cyanLayer)" />
+  <path d="M 512 192 L 692 290 L 512 388 L 332 290 Z" fill="url(#tealLayer)" />
+
+  <rect x="312" y="636" width="114" height="30" rx="15" fill="#14B8A6" />
+  <rect x="312" y="686" width="256" height="30" rx="15" fill="#14B8A6" />
+  <rect x="602" y="636" width="110" height="30" rx="15" fill="#38BDF8" />
+</svg>

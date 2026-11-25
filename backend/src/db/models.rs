@@ -182,7 +182,27 @@ pub struct UpdateEmbeddingProfilePayload {
     pub name: Option<String>,
     pub provider: Option<String>,
     pub model_name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
     pub base_url: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
     pub dimensions: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
     pub api_key: Option<Option<String>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TestEmbeddingProfileDraftPayload {
+    pub profile_id: Option<String>,
+    pub provider: String,
+    pub model_name: String,
+    pub base_url: Option<String>,
+    pub api_key: Option<String>,
+}
+
+fn deserialize_double_option<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    Deserialize::deserialize(deserializer).map(Some)
 }

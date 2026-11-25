@@ -9,6 +9,7 @@ export function Command({
 }: React.ComponentProps<typeof CommandPrimitive>) {
   return (
     <CommandPrimitive
+      loop
       className={cn(
         "flex h-full w-full flex-col overflow-hidden rounded-lg bg-[var(--bg-elevated)] text-[var(--text-primary)]",
         className,
@@ -58,6 +59,10 @@ export function CommandDialog({
       <div className="w-full max-w-[560px] overflow-hidden rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] shadow-2xl">
         <Command className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-[var(--text-muted)]">
           {children}
+          <div className="flex items-center justify-between border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3.5 py-1.5 text-[10px] text-[var(--text-muted)]">
+            <span>↑↓ Navigate · ↵ Select · Esc Close</span>
+            <span className="font-mono">Ctrl+K</span>
+          </div>
         </Command>
       </div>
     </div>
@@ -68,10 +73,21 @@ export function CommandInput({
   className,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+
+  React.useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   return (
     <div className="flex items-center gap-2.5 border-b border-[var(--border-subtle)] px-3.5">
       <Search className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
       <CommandPrimitive.Input
+        ref={inputRef}
+        autoFocus
         className={cn(
           "flex h-11 w-full bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50",
           className,
@@ -136,7 +152,7 @@ export function CommandItem({
   return (
     <CommandPrimitive.Item
       className={cn(
-        "relative flex cursor-pointer select-none items-center gap-2.5 rounded-md px-2.5 py-2 text-xs text-[var(--text-secondary)] outline-none transition-colors data-[selected=true]:bg-[var(--bg-surface)] data-[selected=true]:text-[var(--text-primary)] data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
+        "relative flex cursor-pointer select-none items-center gap-2.5 rounded-md px-2.5 py-2 text-xs text-[var(--text-secondary)] outline-none transition-colors data-[selected=true]:bg-[var(--accent-primary)]/15 data-[selected=true]:text-[var(--text-primary)] data-[selected=true]:ring-1 data-[selected=true]:ring-[var(--accent-primary)]/35 data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
         className,
       )}
       {...props}

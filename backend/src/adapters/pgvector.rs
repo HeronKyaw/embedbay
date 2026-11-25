@@ -7,10 +7,10 @@ use tokio_postgres::{Client, NoTls};
 use tokio_postgres_rustls::MakeRustlsConnect;
 
 use crate::adapters::{
-    AdapterError, BrowseRecordsRequest, BrowseRecordsResponse, CollectionSchema,
-    CollectionSummary, ConnectionTestResult, CreateCollectionRequest, FilterCondition,
-    FilterLogic, FilterSpec, PayloadFieldSchema, SearchRequest, SearchResponse, VectorDbAdapter,
-    VectorRecord,
+    format_connection_error, AdapterError, BrowseRecordsRequest, BrowseRecordsResponse,
+    CollectionSchema, CollectionSummary, ConnectionTestResult, CreateCollectionRequest,
+    FilterCondition, FilterLogic, FilterSpec, PayloadFieldSchema, SearchRequest, SearchResponse,
+    VectorDbAdapter, VectorRecord,
 };
 
 pub struct PgVectorAdapter {
@@ -246,6 +246,7 @@ impl PgVectorAdapter {
     }
 
     async fn connect(&self) -> Result<Client, AdapterError> {
+        let timeout_dur = std::time::Duration::from_secs(8);
         if self.use_tls {
             let mut root_store = rustls::RootCertStore::empty();
             root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -253,17 +254,35 @@ impl PgVectorAdapter {
                 .with_root_certificates(root_store)
                 .with_no_client_auth();
             let tls = MakeRustlsConnect::new(config);
-            let (client, connection) = tokio_postgres::connect(&self.conn_string, tls)
-                .await
-                .map_err(|e| AdapterError::Http(e.to_string()))?;
+            let (client, connection) =
+                tokio::time::timeout(timeout_dur, tokio_postgres::connect(&self.conn_string, tls))
+                    .await
+                    .map_err(|_| {
+                        AdapterError::Http(
+                            "Connection timed out. Check the host, VPN, or firewall.".to_string(),
+                        )
+                    })?
+                    .map_err(|e| {
+                        AdapterError::Http(format_connection_error("PostgreSQL", &e.to_string()))
+                    })?;
             tokio::spawn(async move {
                 let _ = connection.await;
             });
             Ok(client)
         } else {
-            let (client, connection) = tokio_postgres::connect(&self.conn_string, NoTls)
-                .await
-                .map_err(|e| AdapterError::Http(e.to_string()))?;
+            let (client, connection) = tokio::time::timeout(
+                timeout_dur,
+                tokio_postgres::connect(&self.conn_string, NoTls),
+            )
+            .await
+            .map_err(|_| {
+                AdapterError::Http(
+                    "Connection timed out. Check the host, VPN, or firewall.".to_string(),
+                )
+            })?
+            .map_err(|e| {
+                AdapterError::Http(format_connection_error("PostgreSQL", &e.to_string()))
+            })?;
             tokio::spawn(async move {
                 let _ = connection.await;
             });

@@ -1,5 +1,6 @@
 import * as React from "react";
 import { CheckCircle2, Globe, Loader2, ShieldAlert } from "lucide-react";
+import { TagPicker } from "@/components/sidebar/TagPicker";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
@@ -8,6 +9,7 @@ import {
   updateRemoteConnection,
 } from "@/ipc/connections";
 import { testConnection } from "@/ipc/explorer";
+import { formatUserError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
 import { useTabsStore } from "@/stores/useTabsStore";
@@ -31,8 +33,8 @@ export function RemoteConnectionModal() {
   const refreshConnectionsAndProfiles = useTabsStore(
     (s) => s.refreshConnectionsAndProfiles,
   );
+  const clearConnectionError = useTabsStore((s) => s.clearConnectionError);
   const groups = useRuntimeStore((s) => s.groups);
-  const tags = useRuntimeStore((s) => s.tags);
 
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
@@ -99,9 +101,12 @@ export function RemoteConnectionModal() {
               extra_json: extraJson.trim() || "{}",
             });
       setTestResult(`${res.message} (${res.latency_ms} ms)`);
+      if (editing) {
+        clearConnectionError(`remote:${editing.id}`);
+      }
       toast.success("Connection verified", res.message);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = formatUserError(err);
       setTestResult(`Error: ${msg}`);
       toast.error("Connection test failed", msg);
     } finally {
@@ -139,6 +144,7 @@ export function RemoteConnectionModal() {
           extra_json: extraJson.trim() || "{}",
           tag_ids: selectedTags,
         });
+        clearConnectionError(`remote:${editing.id}`);
         toast.success(`Updated "${name.trim()}"`);
       } else {
         await createRemoteConnection({
@@ -341,40 +347,10 @@ export function RemoteConnectionModal() {
           />
         </div>
 
-        {tags.length > 0 && (
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-[var(--text-secondary)]">
-              Tags
-            </label>
-            <div className="flex flex-wrap gap-1">
-              {tags.map((t) => {
-                const active = selectedTags.includes(t.id);
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() =>
-                      setSelectedTags((prev) =>
-                        prev.includes(t.id)
-                          ? prev.filter((x) => x !== t.id)
-                          : [...prev, t.id],
-                      )
-                    }
-                    style={{ "--pill-color": t.color } as React.CSSProperties}
-                    className={cn(
-                      "tag-pill inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium cursor-pointer",
-                      active
-                        ? "ring-1 ring-[var(--text-primary)]"
-                        : "opacity-55 hover:opacity-90",
-                    )}
-                  >
-                    {t.name}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        <TagPicker
+          selectedTagIds={selectedTags}
+          onChange={setSelectedTags}
+        />
 
         {testResult && (
           <div

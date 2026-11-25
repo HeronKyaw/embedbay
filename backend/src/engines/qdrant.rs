@@ -55,16 +55,18 @@ impl EngineProvider for QdrantProvider {
         let grpc_port = instance.grpc_port.unwrap_or(instance.port.saturating_add(1));
 
         let config_yaml = format!(
-            "log_level: {log_level}\n\
-             storage:\n\
-               storage_path: \"{storage_path}\"\n\
-               snapshots_path: \"{snapshots_path}\"\n\
-             service:\n\
-               host: \"{host}\"\n\
-               http_port: {http_port}\n\
-               grpc_port: {grpc_port}\n\
-               enable_cors: {enable_cors}\n\
-             telemetry_disabled: true\n",
+            concat!(
+                "log_level: {log_level}\n",
+                "storage:\n",
+                "  storage_path: \"{storage_path}\"\n",
+                "  snapshots_path: \"{snapshots_path}\"\n",
+                "service:\n",
+                "  host: \"{host}\"\n",
+                "  http_port: {http_port}\n",
+                "  grpc_port: {grpc_port}\n",
+                "  enable_cors: {enable_cors}\n",
+                "telemetry_disabled: true\n",
+            ),
             log_level = log_level,
             storage_path = yaml_path(&data_dir),
             snapshots_path = yaml_path(&snapshots_dir),
@@ -129,8 +131,11 @@ mod tests {
         assert_eq!(spec.args[0], "--config-path");
         let yaml = fs::read_to_string(dir.path().join("config").join("config.yaml"))
             .expect("read config.yaml");
-        assert!(yaml.contains("http_port: 6333"));
-        assert!(yaml.contains("grpc_port: 6334"));
+        assert!(yaml.contains("storage:\n  storage_path: \""));
+        assert!(yaml.contains("\n  snapshots_path: \""));
+        assert!(yaml.contains(
+            "service:\n  host: \"127.0.0.1\"\n  http_port: 6333\n  grpc_port: 6334\n  enable_cors: true\n"
+        ));
         assert!(yaml.contains("log_level: WARN"));
         assert!(yaml.contains("telemetry_disabled: true"));
         assert!(!yaml.contains('\\'));

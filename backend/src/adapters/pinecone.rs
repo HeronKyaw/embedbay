@@ -6,6 +6,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use serde_json::{json, Value};
 
 use crate::adapters::{
+    format_http_status_error, format_invalid_json_error, format_reqwest_error,
     http_client_for_url, AdapterError, BrowseRecordsRequest, BrowseRecordsResponse,
     CollectionSchema, CollectionSummary, ConnectionTestResult, CreateCollectionRequest,
     FilterCondition, FilterLogic, FilterSpec, PayloadFieldSchema, SearchRequest, SearchResponse,
@@ -78,20 +79,27 @@ impl PineconeAdapter {
         if let Some(b) = body {
             req = req.json(&b);
         }
-        let resp = req.send().await.map_err(|e| AdapterError::Http(e.to_string()))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
         let status = resp.status();
-        let text = resp.text().await.map_err(|e| AdapterError::Http(e.to_string()))?;
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
         if !status.is_success() {
-            return Err(AdapterError::Api(format!(
-                "Pinecone {} returned {}: {}",
-                full_url, status, text
+            return Err(AdapterError::Api(format_http_status_error(
+                "Pinecone",
+                status,
+                &text,
             )));
         }
         if text.trim().is_empty() {
             return Ok(Value::Null);
         }
         serde_json::from_str(&text)
-            .map_err(|e| AdapterError::Api(format!("Invalid Pinecone JSON: {}", e)))
+            .map_err(|_| AdapterError::Api(format_invalid_json_error("Pinecone", &text)))
     }
 
     fn ns_for(&self, collection: &str) -> String {

@@ -1,5 +1,6 @@
 import * as React from "react";
 import {
+  AlertTriangle,
   Archive,
   ArchiveRestore,
   Boxes,
@@ -15,11 +16,13 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { LogViewer } from "@/components/manager/LogViewer";
 import { ResourceMeters } from "@/components/manager/ResourceMeters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { InstanceStatusBadge } from "@/components/ui/status-badge";
 import { toast } from "@/components/ui/toast";
 import {
   deleteInstance,
@@ -36,47 +39,6 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/useAppStore";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
 import type { InstanceRecord, InstanceStatus } from "@/types/runtime";
-
-function StatusBadge({ status }: { status: InstanceStatus }) {
-  switch (status) {
-    case "running":
-      return (
-        <Badge variant="running">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--status-running)]" />
-          Running
-        </Badge>
-      );
-    case "starting":
-    case "stopping":
-      return (
-        <Badge variant="warning">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--status-starting)] animate-pulse" />
-          {status === "starting" ? "Starting" : "Stopping"}
-        </Badge>
-      );
-    case "error":
-      return (
-        <Badge variant="error">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--status-error)]" />
-          Error
-        </Badge>
-      );
-    case "embedded":
-      return (
-        <Badge variant="accent">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent-secondary)]" />
-          Embedded (0 MB)
-        </Badge>
-      );
-    default:
-      return (
-        <Badge variant="default">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--status-stopped)]" />
-          Stopped
-        </Badge>
-      );
-  }
-}
 
 export function ServicesDashboard({
   onExploreInstance,
@@ -183,71 +145,69 @@ export function ServicesDashboard({
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 p-6">
-      {/* Header Summary Strip */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Boxes className="h-4 w-4 text-[var(--accent-primary)]" />
-            <h1 className="text-base font-semibold tracking-tight text-[var(--text-primary)]">
-              Local Runtimes & Services
-            </h1>
-            <Badge variant={runningCount > 0 ? "running" : "default"}>
+      <PageHeader
+        icon={<Boxes className="h-4 w-4 shrink-0 text-[var(--accent-primary)]" />}
+        title="Local Runtimes & Services"
+        badges={
+          <>
+            <Badge
+              variant={runningCount > 0 ? "running" : "default"}
+              className="h-5"
+            >
               {runningCount} Running
             </Badge>
-            <Badge variant="default" className="font-mono">
-              RAM: {formatRamMb(totalRamBytes)}
-            </Badge>
-            <Badge variant="default" className="font-mono">
-              Disk: {formatBytes(totalDiskBytes)}
-            </Badge>
-          </div>
-          <p className="mt-1 text-xs text-[var(--text-secondary)]">
-            Native vector DB instances supervised without Docker or flashing
-            console windows.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {runningCount > 0 && (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void handleStopIdle()}
-              >
-                <Moon className="h-3.5 w-3.5" />
-                Stop Idle Services
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void handleStopAll()}
-              >
-                <Square className="h-3.5 w-3.5 text-[var(--status-error)]" />
-                Stop All
-              </Button>
-            </>
-          )}
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => setActiveSection("store")}
-          >
-            Engine Store
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => openCreateInstanceModal()}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New Instance
-          </Button>
-        </div>
-      </div>
+            <span className="inline-flex h-5 items-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 font-mono text-[11px] leading-none text-[var(--text-secondary)]">
+              RAM {formatRamMb(totalRamBytes)}
+            </span>
+            <span className="inline-flex h-5 items-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 font-mono text-[11px] leading-none text-[var(--text-secondary)]">
+              Disk {formatBytes(totalDiskBytes)}
+            </span>
+          </>
+        }
+        description="Native vector DB instances supervised without Docker or flashing console windows."
+        actions={
+          <>
+            {runningCount > 0 && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleStopIdle()}
+                >
+                  <Moon className="h-3.5 w-3.5" />
+                  Stop Idle Services
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleStopAll()}
+                >
+                  <Square className="h-3.5 w-3.5 text-[var(--status-error)]" />
+                  Stop All
+                </Button>
+              </>
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setActiveSection("store")}
+            >
+              Engine Store
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => openCreateInstanceModal()}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New Instance
+            </Button>
+          </>
+        }
+      />
 
       {/* Instances List */}
       {instances.length === 0 ? (
@@ -311,7 +271,10 @@ export function ServicesDashboard({
                       <h3 className="truncate text-sm font-semibold text-[var(--text-primary)]">
                         {inst.name}
                       </h3>
-                      <StatusBadge status={status} />
+                      <InstanceStatusBadge
+                        status={status}
+                        embeddedLabel="Embedded (0 MB)"
+                      />
                       {group && (
                         <Badge variant="default" className="text-[10px]">
                           {group.name}
@@ -578,46 +541,112 @@ export function ServicesDashboard({
         onOpenChange={(next) => {
           if (!next) setDeleteTarget(null);
         }}
+        icon={<Trash2 className="h-4 w-4 shrink-0 text-[var(--status-error)]" />}
         title="Delete Instance"
-        description={`Are you sure you want to remove "${deleteTarget?.name ?? ""}"?`}
-        maxWidthClass="w-[420px]"
+        description="Remove this local vector database instance from EmbedBay."
+        maxWidthClass="w-[480px]"
       >
-        <div className="space-y-4">
-          <label className="flex items-start gap-2 rounded-md border border-[var(--status-error)]/30 bg-[var(--status-error)]/10 p-3 text-xs text-[var(--text-primary)] cursor-pointer">
-            <input
-              type="checkbox"
-              checked={deleteDataFlag}
-              onChange={(e) => setDeleteDataFlag(e.target.checked)}
-              className="mt-0.5 h-3.5 w-3.5 accent-[var(--status-error)]"
-            />
-            <span>
-              Also permanently delete vector data & logs on disk (
-              <span className="font-mono text-[10px] text-[var(--text-secondary)]">
-                {deleteTarget?.data_dir}
-              </span>
-              )
-            </span>
-          </label>
+        {deleteTarget &&
+          (() => {
+            const targetMetrics = metrics[deleteTarget.id];
+            const targetStatus: InstanceStatus =
+              targetMetrics?.status ?? "stopped";
+            const targetEmbedded =
+              targetStatus === "embedded" ||
+              deleteTarget.engine_type === "lancedb";
 
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setDeleteTarget(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              onClick={() => void handleConfirmDelete()}
-            >
-              Delete Instance
-            </Button>
-          </div>
-        </div>
+            return (
+              <div className="space-y-4">
+                {/* Instance Summary Card */}
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                      {deleteTarget.name}
+                    </span>
+                    <InstanceStatusBadge
+                      status={targetStatus}
+                      embeddedLabel="Embedded"
+                    />
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-[var(--text-secondary)]">
+                    <span className="uppercase text-[var(--accent-secondary)]">
+                      {deleteTarget.engine_type} v{deleteTarget.engine_version}
+                    </span>
+                    <span className="text-[var(--text-muted)]">·</span>
+                    <span>
+                      {targetEmbedded
+                        ? "Embedded"
+                        : `${deleteTarget.host}:${deleteTarget.port}`}
+                    </span>
+                    <span className="text-[var(--text-muted)]">·</span>
+                    <span>
+                      Disk {formatBytes(targetMetrics?.disk_bytes ?? 0)}
+                    </span>
+                  </div>
+                  {targetStatus === "running" && (
+                    <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-[var(--status-starting)]/30 bg-[var(--status-starting)]/10 px-2.5 py-1.5 text-[11px] text-[var(--status-starting)]">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        Running process will be stopped before removal.
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Disk Data Deletion Option Card */}
+                <div
+                  className={cn(
+                    "rounded-xl border p-3.5 transition-colors",
+                    deleteDataFlag
+                      ? "border-[var(--status-error)]/40 bg-[var(--status-error)]/10"
+                      : "border-[var(--border-subtle)] bg-[var(--bg-surface)]",
+                  )}
+                >
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={deleteDataFlag}
+                      onChange={(e) => setDeleteDataFlag(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--status-error)]"
+                    />
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="text-xs font-medium text-[var(--text-primary)]">
+                        Also permanently delete vector data & logs on disk
+                      </div>
+                      <p className="text-[11px] text-[var(--text-secondary)]">
+                        {deleteDataFlag
+                          ? "All vector collections, indexes, and log files in this directory will be permanently erased."
+                          : "Unchecked: instance config is removed, while your vector data directory remains preserved on disk."}
+                      </p>
+                      <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 font-mono text-[10px] leading-relaxed text-[var(--text-muted)] break-all">
+                        {deleteTarget.data_dir}
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Action Footer */}
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDeleteTarget(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => void handleConfirmDelete()}
+                  >
+                    {deleteDataFlag ? "Delete Instance & Data" : "Delete Instance"}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
       </Dialog>
     </div>
   );

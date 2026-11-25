@@ -21,7 +21,7 @@ use crate::supervisor::EventSink;
 pub enum InstallError {
     #[error("manifest error: {0}")]
     Manifest(String),
-    #[error("HTTP download failed: {0}")]
+    #[error("{0}")]
     Http(String),
     #[error("SHA-256 verification failed: expected {expected}, got {actual}")]
     ChecksumMismatch { expected: String, actual: String },
@@ -119,7 +119,7 @@ pub async fn install_engine(
     }
     let client = client_builder
         .build()
-        .map_err(|e| InstallError::Http(e.to_string()))?;
+        .map_err(|e| InstallError::Http(crate::adapters::format_reqwest_error(&e)))?;
 
     let computed_sha = download_and_verify(
         &client,
@@ -240,12 +240,11 @@ async fn download_and_verify(
         .get(url)
         .send()
         .await
-        .map_err(|e| InstallError::Http(e.to_string()))?;
+        .map_err(|e| InstallError::Http(crate::adapters::format_reqwest_error(&e)))?;
     if !response.status().is_success() {
         return Err(InstallError::Http(format!(
-            "HTTP {} downloading {}",
-            response.status(),
-            url
+            "Download failed (HTTP {}).",
+            response.status().as_u16()
         )));
     }
 
@@ -271,7 +270,8 @@ async fn download_and_verify(
 
     let mut stream = response.bytes_stream();
     while let Some(chunk_res) = stream.next().await {
-        let chunk = chunk_res.map_err(|e| InstallError::Http(e.to_string()))?;
+        let chunk = chunk_res
+            .map_err(|e| InstallError::Http(crate::adapters::format_reqwest_error(&e)))?;
         file.write_all(&chunk)?;
         hasher.update(&chunk);
         downloaded_bytes += chunk.len() as u64;

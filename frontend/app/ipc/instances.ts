@@ -75,7 +75,21 @@ export async function stopIdleInstances(
 
 export async function getAllInstanceMetrics(): Promise<SystemMetricsSummary> {
   if (!isTauriRuntime()) {
-    return { total_ram_bytes: 0, running_count: 0, instances: {} };
+    return {
+      total_ram_bytes: 0,
+      total_cpu_percent: 0,
+      total_disk_bytes: 0,
+      running_count: 0,
+      host: {
+        cpu_percent: 0,
+        cpu_cores: 0,
+        memory_used_bytes: 0,
+        memory_total_bytes: 0,
+        disk_available_bytes: 0,
+        disk_total_bytes: 0,
+      },
+      instances: {},
+    };
   }
   return invoke<SystemMetricsSummary>("get_all_instance_metrics");
 }

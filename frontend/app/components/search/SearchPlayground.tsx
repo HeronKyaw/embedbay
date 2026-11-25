@@ -115,7 +115,7 @@ export function SearchPlayground({
     <div className="flex min-h-0 flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Controls Header */}
-        <div className="space-y-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
+        <div className="space-y-3 border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Badge variant="ai">
@@ -128,12 +128,12 @@ export function SearchPlayground({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] p-0.5 text-[11px]">
+              <div className="inline-flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-0.5 text-[11px]">
                 <button
                   type="button"
                   onClick={() => updateTab(tab.id, { searchMode: "text" })}
                   className={cn(
-                    "rounded px-2.5 py-1 font-medium cursor-pointer",
+                    "rounded-md px-2.5 py-1 font-medium cursor-pointer",
                     tab.searchMode === "text"
                       ? "bg-[var(--accent-ai)] text-white"
                       : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
@@ -145,7 +145,7 @@ export function SearchPlayground({
                   type="button"
                   onClick={() => updateTab(tab.id, { searchMode: "vector" })}
                   className={cn(
-                    "rounded px-2.5 py-1 font-medium cursor-pointer",
+                    "rounded-md px-2.5 py-1 font-medium cursor-pointer",
                     tab.searchMode === "vector"
                       ? "bg-[var(--accent-primary)] text-slate-950 font-semibold"
                       : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
@@ -198,7 +198,7 @@ export function SearchPlayground({
                   }
                 }}
                 placeholder="Enter natural language query (Ctrl+Enter to search)..."
-                className="h-9 rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-3 text-xs text-[var(--text-primary)] focus:border-[var(--accent-ai)] focus:outline-none"
+                className="h-9 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] focus:outline-none"
               />
               <div className="flex items-center gap-1.5">
                 <select
@@ -206,7 +206,7 @@ export function SearchPlayground({
                   onChange={(e) =>
                     updateTab(tab.id, { searchProfileId: e.target.value })
                   }
-                  className="h-9 flex-1 rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2 text-xs text-[var(--text-primary)] focus:outline-none"
+                  className="h-9 flex-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 text-xs text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none"
                 >
                   {embeddingProfiles.length === 0 ? (
                     <option value="">No embedding profile</option>
@@ -238,7 +238,7 @@ export function SearchPlayground({
                 updateTab(tab.id, { searchVectorText: e.target.value })
               }
               placeholder="Paste raw float vector array e.g. [0.021, -0.14, 0.88, ...]"
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] p-2 font-mono text-[11px] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+              className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-2 font-mono text-[11px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] focus:outline-none"
             />
           )}
 
@@ -256,7 +256,7 @@ export function SearchPlayground({
                     searchTopK: Math.max(1, Number(e.target.value)),
                   })
                 }
-                className="h-7 w-16 rounded border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2 font-mono text-xs text-[var(--text-primary)]"
+                className="h-7 w-16 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 font-mono text-xs text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none"
               />
             </label>
 
@@ -389,7 +389,7 @@ export function SearchPlayground({
         onOpenChange={setProfileDialogOpen}
         title="Configure Embedding Profiles"
         description="Connect local Ollama or OpenAI-compatible embedding models."
-        maxWidthClass="w-[680px]"
+        maxWidthClass="w-[min(92vw,720px)]"
       >
         <EmbeddingProfilesPanel />
       </Dialog>

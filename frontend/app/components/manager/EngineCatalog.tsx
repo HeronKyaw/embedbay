@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Trash2,
 } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
@@ -267,38 +268,33 @@ export function EngineCatalog({
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <HardDriveDownload className="h-4 w-4 text-[var(--accent-primary)]" />
-            <h1 className="text-base font-semibold tracking-tight text-[var(--text-primary)]">
-              Native Engine Store
-            </h1>
-            <Badge variant="accent">
-              {appStatus?.platform.target_triple ?? "x86_64-pc-windows-msvc"}
-            </Badge>
-          </div>
-          <p className="mt-1 text-xs text-[var(--text-secondary)]">
-            Download, SHA-256 verify, and install native vector database
-            engines with zero Docker overhead. {installedEngines.length}{" "}
-            runtime version(s) installed.
-          </p>
-        </div>
-
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          disabled={refreshing}
-          onClick={() => void handleRefresh()}
-        >
-          <RefreshCw
-            className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`}
-          />
-          Refresh Catalog
-        </Button>
-      </div>
+    <div className="mx-auto max-w-6xl space-y-5 p-6">
+      <PageHeader
+        icon={
+          <HardDriveDownload className="h-4 w-4 shrink-0 text-[var(--accent-primary)]" />
+        }
+        title="Native Engine Store"
+        badges={
+          <span className="inline-flex h-5 items-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 font-mono text-[11px] leading-none text-[var(--accent-secondary)]">
+            {appStatus?.platform.target_triple ?? "x86_64-pc-windows-msvc"}
+          </span>
+        }
+        description={`Download, SHA-256 verify, and install native vector database engines with zero Docker overhead. ${installedEngines.length} runtime version(s) installed.`}
+        actions={
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={refreshing}
+            onClick={() => void handleRefresh()}
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`}
+            />
+            Refresh Catalog
+          </Button>
+        }
+      />
 
       {storageCleanupBanner}
 

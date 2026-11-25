@@ -18,13 +18,17 @@ pub fn open_or_focus_main_window(app: &AppHandle) -> tauri::Result<()> {
         return Ok(());
     }
 
-    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+    let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
         .title("EmbedBay")
         .inner_size(1280.0, 800.0)
         .min_inner_size(960.0, 640.0)
+        .background_color(tauri::window::Color(9, 12, 18, 255))
         .center()
         .decorations(false)
         .build()?;
+
+    let _ = window.show();
+    let _ = window.set_focus();
 
     Ok(())
 }

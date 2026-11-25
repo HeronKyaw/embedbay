@@ -13,19 +13,25 @@ import {
   clearInstanceLogs,
   subscribeInstanceLogs,
 } from "@/ipc/instances";
+import { parseAnsi, stripAnsi } from "@/lib/ansi";
 import { formatLogTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
+import type { LogEntry } from "@/types/runtime";
+
+const EMPTY_LOGS: LogEntry[] = [];
 
 export function LogViewer({
   instanceId,
   onClose,
+  fullHeight = false,
 }: {
   instanceId: string;
   onClose?: () => void;
+  fullHeight?: boolean;
 }) {
   const instances = useRuntimeStore((s) => s.instances);
-  const logs = useRuntimeStore((s) => s.logsByInstance[instanceId] ?? []);
+  const logs = useRuntimeStore((s) => s.logsByInstance[instanceId] ?? EMPTY_LOGS);
   const setInstanceLogs = useRuntimeStore((s) => s.setInstanceLogs);
 
   const [streamFilter, setStreamFilter] = React.useState<string>("all");
@@ -51,7 +57,7 @@ export function LogViewer({
     const q = search.trim().toLowerCase();
     return logs.filter((entry) => {
       if (streamFilter !== "all" && entry.stream !== streamFilter) return false;
-      if (q && !entry.message.toLowerCase().includes(q)) return false;
+      if (q && !stripAnsi(entry.message).toLowerCase().includes(q)) return false;
       return true;
     });
   }, [logs, streamFilter, search]);
@@ -65,7 +71,7 @@ export function LogViewer({
     const text = filtered
       .map(
         (l) =>
-          `[${formatLogTime(l.timestamp_ms)}][${l.stream}] ${l.message}`,
+          `[${formatLogTime(l.timestamp_ms)}][${l.stream}] ${stripAnsi(l.message)}`,
       )
       .join("\n");
     void navigator.clipboard.writeText(text);
@@ -76,7 +82,7 @@ export function LogViewer({
     const text = filtered
       .map(
         (l) =>
-          `[${formatLogTime(l.timestamp_ms)}][${l.stream}] ${l.message}`,
+          `[${formatLogTime(l.timestamp_ms)}][${l.stream}] ${stripAnsi(l.message)}`,
       )
       .join("\n");
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
@@ -102,21 +108,26 @@ export function LogViewer({
   };
 
   return (
-    <section className="flex flex-col overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+    <section
+      className={cn(
+        "flex flex-col overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]",
+        fullHeight && "h-full min-h-0 flex-1",
+      )}
+    >
       {/* Header Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3.5 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <Terminal className="h-3.5 w-3.5 text-[var(--accent-primary)]" />
-          <span className="text-xs font-semibold text-[var(--text-primary)]">
+          <Terminal className="h-3.5 w-3.5 shrink-0 text-[var(--accent-primary)]" />
+          <span className="text-xs font-semibold leading-none text-[var(--text-primary)]">
             Live Logs: {instance?.name ?? instanceId}
           </span>
-          <span className="font-mono text-[10px] text-[var(--text-muted)]">
+          <span className="inline-flex h-4 items-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-1.5 font-mono text-[10px] leading-none text-[var(--text-muted)]">
             {filtered.length} lines
           </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          <div className="flex h-7 items-center gap-1.5 rounded border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2">
+          <div className="flex h-7 items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 transition-colors focus-within:border-[var(--border-strong)]">
             <Search className="h-3 w-3 text-[var(--text-muted)]" />
             <input
               type="text"
@@ -130,7 +141,7 @@ export function LogViewer({
           <select
             value={streamFilter}
             onChange={(e) => setStreamFilter(e.target.value)}
-            className="h-7 rounded border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-1.5 text-[11px] text-[var(--text-primary)] focus:outline-none"
+            className="h-7 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 text-[11px] text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none"
           >
             <option value="all">All Streams</option>
             <option value="stdout">stdout</option>
@@ -142,10 +153,10 @@ export function LogViewer({
             type="button"
             onClick={() => setAutoScroll(!autoScroll)}
             className={cn(
-              "h-7 rounded border px-2 text-[11px] font-medium cursor-pointer",
+              "h-7 rounded-lg border px-2.5 text-[11px] font-medium transition-colors cursor-pointer",
               autoScroll
                 ? "border-[var(--accent-primary)]/40 bg-[var(--accent-primary)]/15 text-[var(--accent-primary)]"
-                : "border-[var(--border-strong)] bg-[var(--bg-canvas)] text-[var(--text-muted)]",
+                : "border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]",
             )}
           >
             Auto-scroll
@@ -195,38 +206,50 @@ export function LogViewer({
       {/* Monospace Log Viewport */}
       <div
         ref={scrollRef}
-        className="h-64 overflow-y-auto bg-[var(--bg-canvas)] p-3 font-mono text-[11px] leading-relaxed"
+        className={cn(
+          "overflow-auto bg-[var(--bg-canvas)] p-3 font-mono text-[11px] leading-[1.45]",
+          fullHeight ? "min-h-0 flex-1" : "h-[400px]",
+        )}
       >
         {filtered.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[var(--text-muted)]">
             No log lines captured yet. Start the instance to stream output.
           </div>
         ) : (
-          filtered.map((entry, idx) => (
-            <div
-              key={`${entry.timestamp_ms}-${idx}`}
-              className="flex items-start gap-2 border-b border-[var(--border-subtle)]/30 py-0.5"
-            >
-              <span className="shrink-0 text-[var(--text-muted)]">
-                {formatLogTime(entry.timestamp_ms)}
-              </span>
-              <span
-                className={cn(
-                  "w-12 shrink-0 uppercase",
-                  entry.stream === "stderr"
-                    ? "text-[var(--status-error)]"
-                    : entry.stream === "system"
-                      ? "text-[var(--accent-secondary)]"
-                      : "text-[var(--accent-primary)]",
-                )}
+          filtered.map((entry, idx) => {
+            const segments = parseAnsi(entry.message);
+            return (
+              <div
+                key={`${entry.timestamp_ms}-${idx}`}
+                className="flex items-start gap-2 rounded px-1.5 py-[1px] hover:bg-[var(--bg-elevated)]/40"
               >
-                {entry.stream}
-              </span>
-              <span className="min-w-0 flex-1 break-all text-[var(--text-primary)]">
-                {entry.message}
-              </span>
-            </div>
-          ))
+                <span className="shrink-0 select-none text-[var(--text-muted)]">
+                  {formatLogTime(entry.timestamp_ms)}
+                </span>
+                <span
+                  className={cn(
+                    "w-12 shrink-0 select-none uppercase",
+                    entry.stream === "stderr"
+                      ? "text-[var(--status-error)]"
+                      : entry.stream === "system"
+                        ? "text-[var(--accent-secondary)]"
+                        : "text-[var(--accent-primary)]",
+                  )}
+                >
+                  {entry.stream}
+                </span>
+                <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[var(--text-primary)]">
+                  {segments.length === 0
+                    ? " "
+                    : segments.map((seg, sIdx) => (
+                        <span key={sIdx} style={seg.style}>
+                          {seg.text}
+                        </span>
+                      ))}
+                </span>
+              </div>
+            );
+          })
         )}
       </div>
     </section>

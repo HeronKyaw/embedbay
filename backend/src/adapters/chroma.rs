@@ -6,6 +6,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use serde_json::{json, Value};
 
 use crate::adapters::{
+    format_http_status_error, format_invalid_json_error, format_reqwest_error,
     http_client_for_url, AdapterError, BrowseRecordsRequest, BrowseRecordsResponse,
     CollectionSchema, CollectionSummary, ConnectionTestResult, CreateCollectionRequest,
     FilterCondition, FilterLogic, FilterSpec, PayloadFieldSchema, SearchRequest, SearchResponse,
@@ -97,20 +98,27 @@ impl ChromaAdapter {
         if let Some(b) = body {
             req = req.json(&b);
         }
-        let resp = req.send().await.map_err(|e| AdapterError::Http(e.to_string()))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
         let status = resp.status();
-        let text = resp.text().await.map_err(|e| AdapterError::Http(e.to_string()))?;
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
         if !status.is_success() {
-            return Err(AdapterError::Api(format!(
-                "Chroma {} returned {}: {}",
-                path, status, text
+            return Err(AdapterError::Api(format_http_status_error(
+                "Chroma",
+                status,
+                &text,
             )));
         }
         if text.trim().is_empty() {
             return Ok(Value::Null);
         }
         serde_json::from_str::<Value>(&text)
-            .map_err(|e| AdapterError::Api(format!("Invalid Chroma JSON response: {}", e)))
+            .map_err(|_| AdapterError::Api(format_invalid_json_error("Chroma", &text)))
     }
 
     async fn resolve_collection_obj(&self, collection: &str) -> Result<Value, AdapterError> {
@@ -237,6 +245,11 @@ impl VectorDbAdapter for ChromaAdapter {
             .ok()
             .and_then(|v| v.as_str().map(ToString::to_string));
 
+        if self.auth_type != "none" {
+            self.send_json(reqwest::Method::GET, &self.collections_base(), None)
+                .await?;
+        }
+
         let hb_ok = !heartbeat.is_null();
         Ok(ConnectionTestResult {
             ok: hb_ok,
@@ -253,7 +266,11 @@ impl VectorDbAdapter for ChromaAdapter {
         let resp = self
             .send_json(reqwest::Method::GET, &self.collections_base(), None)
             .await?;
-        let arr = resp.as_array().cloned().unwrap_or_default();
+        let arr = resp.as_array().cloned().ok_or_else(|| {
+            AdapterError::Api(
+                "Unexpected response from Chroma. Check endpoint URL or credentials.".to_string(),
+            )
+        })?;
         let mut out = Vec::with_capacity(arr.len());
 
         for col in arr {

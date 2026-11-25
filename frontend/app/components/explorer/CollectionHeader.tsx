@@ -14,6 +14,7 @@ import type { CollectionSchema } from "@/types/explorer";
 
 export function CollectionHeader({
   schema,
+  collectionName,
   loading,
   onRefresh,
   onUpsertRecord,
@@ -33,11 +34,11 @@ export function CollectionHeader({
   onDeleteCollection: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <Layers className="h-4 w-4 text-[var(--accent-primary)]" />
         <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-          {schema?.name}
+          {schema?.name ?? collectionName}
         </h2>
         <Badge variant="accent" className="font-mono">
           {(schema?.vector_count ?? 0).toLocaleString()} records

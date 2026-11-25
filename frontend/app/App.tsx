@@ -6,16 +6,15 @@ import { RemoteConnectionModal } from "@/components/explorer/RemoteConnectionMod
 import { ActivityRail } from "@/components/layout/ActivityRail";
 import { AdaptiveTitlebar } from "@/components/layout/AdaptiveTitlebar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
-import { WorkspaceTabs } from "@/components/layout/WorkspaceTabs";
+import { StatusBar } from "@/components/layout/StatusBar";
 import { CreateInstanceModal } from "@/components/manager/CreateInstanceModal";
 import { EngineCatalog } from "@/components/manager/EngineCatalog";
 import { ServicesDashboard } from "@/components/manager/ServicesDashboard";
-import { SettingsView } from "@/components/settings/SettingsView";
+import { SettingsModal } from "@/components/settings/SettingsView";
 import {
   StorageAndUpdatesPanels,
   UnusedEngineCleanupBanner,
 } from "@/components/settings/StorageAndUpdatesPanels";
-import { ConnectionSidebar } from "@/components/sidebar/ConnectionSidebar";
 import { ToastViewport, toast } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { EmbeddingScatterPlot } from "@/components/visualizer/EmbeddingScatterPlot";
@@ -34,6 +33,7 @@ import type { InstanceRecord } from "@/types/runtime";
 export function App() {
   const activeSection = useAppStore((s) => s.activeSection);
   const setActiveSection = useAppStore((s) => s.setActiveSection);
+  const toggleSettings = useAppStore((s) => s.toggleSettings);
   const statusError = useAppStore((s) => s.statusError);
   const setAppStatus = useAppStore((s) => s.setAppStatus);
   const setStatusLoading = useAppStore((s) => s.setStatusLoading);
@@ -46,6 +46,10 @@ export function App() {
   const refreshConnectionsAndProfiles = useTabsStore(
     (s) => s.refreshConnectionsAndProfiles,
   );
+  const refreshConnectionCollections = useTabsStore(
+    (s) => s.refreshConnectionCollections,
+  );
+  const setActiveTabId = useTabsStore((s) => s.setActiveTabId);
 
   const [transferModalOpen, setTransferModalOpen] = React.useState(false);
   const [transferTarget, setTransferTarget] =
@@ -59,8 +63,19 @@ export function App() {
 
   React.useEffect(() => {
     let active = true;
+    let removeSplashTimer: number | undefined;
+
+    const dismissSplash = () => {
+      const splash = document.getElementById("embedbay-splash");
+      if (!splash) return;
+      splash.classList.add("splash-hidden");
+      removeSplashTimer = window.setTimeout(() => {
+        splash.remove();
+      }, 250);
+    };
+
     setStatusLoading(true);
-    getAppStatus()
+    const statusPromise = getAppStatus()
       .then((status) => {
         if (!active) return;
         setAppStatus(status);
@@ -74,12 +89,26 @@ export function App() {
         if (active) setStatusLoading(false);
       });
 
-    void refreshAll();
-    void refreshConnectionsAndProfiles();
+    const bootstrapPromise = Promise.allSettled([
+      statusPromise,
+      refreshAll(),
+      refreshConnectionsAndProfiles(),
+    ]);
+    const timeoutPromise = new Promise<void>((resolve) => {
+      window.setTimeout(resolve, 1200);
+    });
+
+    void Promise.race([bootstrapPromise, timeoutPromise]).then(() => {
+      if (active) dismissSplash();
+    });
+
     const unlisten = subscribeRuntimeEvents();
 
     return () => {
       active = false;
+      if (removeSplashTimer !== undefined) {
+        window.clearTimeout(removeSplashTimer);
+      }
       unlisten();
     };
   }, [
@@ -89,6 +118,17 @@ export function App() {
     refreshAll,
     refreshConnectionsAndProfiles,
   ]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === ",") {
+        event.preventDefault();
+        toggleSettings();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [toggleSettings]);
 
   const handlePickDirectory = async (): Promise<string | null> => {
     if (!isTauriRuntime()) return null;
@@ -148,13 +188,9 @@ export function App() {
     <TooltipProvider>
       <div className="flex h-screen w-screen flex-col overflow-hidden bg-[var(--bg-canvas)] text-[var(--text-primary)]">
         <AdaptiveTitlebar />
-        <WorkspaceTabs />
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <ActivityRail />
-          <ConnectionSidebar
-            onSelectConnection={() => setActiveSection("explorer")}
-          />
 
           <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--bg-canvas)]">
             {statusError && (
@@ -189,8 +225,14 @@ export function App() {
                 {activeSection === "runtimes" && (
                   <ServicesDashboard
                     onExploreInstance={(instanceId) => {
-                      setSelectedConnectionKey(`local:${instanceId}`);
+                      const key = `local:${instanceId}`;
+                      setSelectedConnectionKey(key);
+                      setActiveTabId(null);
                       setActiveSection("explorer");
+                      void refreshConnectionCollections(key, {
+                        kind: "local_instance",
+                        instance_id: instanceId,
+                      });
                     }}
                     onBackupInstance={(inst) => void handleBackupInstance(inst)}
                     onRestoreInstance={(inst) => void handleRestoreInstance(inst)}
@@ -201,14 +243,14 @@ export function App() {
                     storageCleanupBanner={<UnusedEngineCleanupBanner />}
                   />
                 )}
-                {activeSection === "settings" && (
-                  <SettingsView extraPanels={<StorageAndUpdatesPanels />} />
-                )}
               </div>
             )}
           </main>
         </div>
 
+        <StatusBar />
+
+        <SettingsModal extraPanels={<StorageAndUpdatesPanels />} />
         <CreateInstanceModal onPickDirectory={handlePickDirectory} />
         <RemoteConnectionModal />
         <ImportExportModal

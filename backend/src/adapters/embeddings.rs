@@ -3,7 +3,10 @@ use std::time::Instant;
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use crate::adapters::{http_client_for_url, AdapterError};
+use crate::adapters::{
+    format_http_status_error, format_invalid_json_error, format_reqwest_error,
+    http_client_for_url, AdapterError,
+};
 use crate::db::models::EmbeddingProfile;
 
 #[derive(Debug, Clone, Serialize)]
@@ -78,13 +81,15 @@ async fn embed_ollama(
         }))
         .send()
         .await
-        .map_err(|e| AdapterError::Http(e.to_string()))?;
+        .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
 
     if resp.status().is_success() {
-        let body: Value = resp
-            .json()
+        let body_text = resp
+            .text()
             .await
-            .map_err(|e| AdapterError::Api(e.to_string()))?;
+            .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
+        let body: Value = serde_json::from_str(&body_text)
+            .map_err(|_| AdapterError::Api(format_invalid_json_error("Ollama", &body_text)))?;
         if let Some(arr) = body.get("embeddings").and_then(|v| v.as_array()) {
             let vectors = arr
                 .iter()
@@ -114,17 +119,21 @@ async fn embed_ollama(
             }))
             .send()
             .await
-            .map_err(|e| AdapterError::Http(e.to_string()))?;
+            .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
         let status = r.status();
-        let body_text = r.text().await.map_err(|e| AdapterError::Http(e.to_string()))?;
+        let body_text = r
+            .text()
+            .await
+            .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
         if !status.is_success() {
-            return Err(AdapterError::Api(format!(
-                "Ollama embeddings returned {}: {}",
-                status, body_text
+            return Err(AdapterError::Api(format_http_status_error(
+                "Ollama",
+                status,
+                &body_text,
             )));
         }
         let val: Value = serde_json::from_str(&body_text)
-            .map_err(|e| AdapterError::Api(e.to_string()))?;
+            .map_err(|_| AdapterError::Api(format_invalid_json_error("Ollama", &body_text)))?;
         let vec = val
             .get("embedding")
             .and_then(|v| v.as_array())
@@ -172,21 +181,22 @@ async fn embed_openai_compatible(
     let resp = req
         .send()
         .await
-        .map_err(|e| AdapterError::Http(e.to_string()))?;
+        .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
     let status = resp.status();
     let text = resp
         .text()
         .await
-        .map_err(|e| AdapterError::Http(e.to_string()))?;
+        .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
     if !status.is_success() {
-        return Err(AdapterError::Api(format!(
-            "Embeddings API returned {}: {}",
-            status, text
+        return Err(AdapterError::Api(format_http_status_error(
+            "Embeddings API",
+            status,
+            &text,
         )));
     }
 
     let body: Value = serde_json::from_str(&text)
-        .map_err(|e| AdapterError::Api(format!("Invalid embeddings JSON: {}", e)))?;
+        .map_err(|_| AdapterError::Api(format_invalid_json_error("Embeddings API", &text)))?;
     let mut data = body
         .get("data")
         .and_then(|v| v.as_array())

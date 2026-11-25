@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { cleanupUnusedEngines, getStorageUsage } from "@/ipc/engines";
 import { isTauriRuntime } from "@/ipc/system";
+import { formatUserError } from "@/lib/errors";
 import { formatBytes } from "@/lib/format";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
 import type { StorageUsageSummary } from "@/types/runtime";
@@ -209,7 +210,7 @@ export function StorageAndUpdatesPanels() {
         toast.success("Up to date", "No newer EmbedBay release found.");
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = formatUserError(err);
       setUpdateError(msg);
       setUpdateStatusText("Unable to fetch update manifest.");
     } finally {
@@ -244,7 +245,7 @@ export function StorageAndUpdatesPanels() {
       });
       toast.success("Update installed", "Restarting EmbedBay to finish update.");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = formatUserError(err);
       setUpdateError(msg);
       toast.error("Update install failed", msg);
     } finally {

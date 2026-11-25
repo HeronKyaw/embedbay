@@ -5,10 +5,10 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use crate::adapters::{
-    AdapterError, BrowseRecordsRequest, BrowseRecordsResponse, CollectionSchema,
-    CollectionSummary, ConnectionTestResult, CreateCollectionRequest, FilterCondition,
-    FilterLogic, FilterSpec, PayloadFieldSchema, SearchRequest, SearchResponse, VectorDbAdapter,
-    VectorRecord,
+    format_connection_error, AdapterError, BrowseRecordsRequest, BrowseRecordsResponse,
+    CollectionSchema, CollectionSummary, ConnectionTestResult, CreateCollectionRequest,
+    FilterCondition, FilterLogic, FilterSpec, PayloadFieldSchema, SearchRequest, SearchResponse,
+    VectorDbAdapter, VectorRecord,
 };
 
 pub struct RedisStackAdapter {
@@ -39,12 +39,20 @@ impl RedisStackAdapter {
     }
 
     async fn get_conn(&self) -> Result<redis::aio::MultiplexedConnection, AdapterError> {
-        let client = redis::Client::open(self.connection_url.as_str())
-            .map_err(|e| AdapterError::InvalidRequest(e.to_string()))?;
-        client
-            .get_multiplexed_async_connection()
-            .await
-            .map_err(|e| AdapterError::Http(e.to_string()))
+        let client = redis::Client::open(self.connection_url.as_str()).map_err(|e| {
+            AdapterError::InvalidRequest(format_connection_error("Redis", &e.to_string()))
+        })?;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(8),
+            client.get_multiplexed_async_connection(),
+        )
+        .await
+        .map_err(|_| {
+            AdapterError::Http(
+                "Connection timed out. Check the host, VPN, or firewall.".to_string(),
+            )
+        })?
+        .map_err(|e| AdapterError::Http(format_connection_error("Redis", &e.to_string())))
     }
 }
 
@@ -193,7 +201,7 @@ impl VectorDbAdapter for RedisStackAdapter {
         let pong: String = redis::cmd("PING")
             .query_async(&mut conn)
             .await
-            .map_err(|e| AdapterError::Http(e.to_string()))?;
+            .map_err(|e| AdapterError::Http(format_connection_error("Redis", &e.to_string())))?;
         Ok(ConnectionTestResult {
             ok: pong.eq_ignore_ascii_case("PONG"),
             latency_ms: start.elapsed().as_millis() as u64,

@@ -16,22 +16,40 @@ function TabIcon({ kind }: { kind: WorkspaceTabKind }) {
   }
 }
 
-export function WorkspaceTabs() {
+export function WorkspaceTabs({
+  leadingSlot,
+  connectionKey = null,
+  variant = "bar",
+}: {
+  leadingSlot?: React.ReactNode;
+  connectionKey?: string | null;
+  variant?: "bar" | "inline";
+}) {
   const tabs = useTabsStore((s) => s.tabs);
   const activeTabId = useTabsStore((s) => s.activeTabId);
   const setActiveTabId = useTabsStore((s) => s.setActiveTabId);
   const closeTab = useTabsStore((s) => s.closeTab);
   const setActiveSection = useAppStore((s) => s.setActiveSection);
 
-  if (tabs.length === 0) return null;
+  const visibleTabs = connectionKey
+    ? tabs.filter((tab) => tab.connectionKey === connectionKey)
+    : tabs;
+
+  if (visibleTabs.length === 0 && !leadingSlot) return null;
 
   return (
     <div
       role="tablist"
       aria-label="Workspace Tabs"
-      className="flex h-8 w-full shrink-0 items-end gap-1 overflow-x-auto border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2"
+      className={cn(
+        "flex w-full items-center gap-1 overflow-x-auto",
+        variant === "inline"
+          ? "rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-1"
+          : "shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 py-1.5",
+      )}
     >
-      {tabs.map((tab) => {
+      {leadingSlot}
+      {visibleTabs.map((tab) => {
         const active = tab.id === activeTabId;
         return (
           <div
@@ -51,10 +69,10 @@ export function WorkspaceTabs() {
               }
             }}
             className={cn(
-              "group flex h-7 max-w-[220px] shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 text-[11px] font-medium transition-colors cursor-pointer select-none",
+              "group flex h-7 max-w-[220px] shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-medium transition-colors cursor-pointer select-none",
               active
-                ? "border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-primary)]"
-                : "border-transparent bg-transparent text-[var(--text-muted)] hover:bg-[var(--bg-elevated)]/60 hover:text-[var(--text-secondary)]",
+                ? "border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-primary)]"
+                : "border-transparent bg-transparent text-[var(--text-muted)] hover:bg-[var(--bg-elevated)]/60 hover:text-[var(--text-primary)]",
             )}
           >
             <TabIcon kind={tab.kind} />

@@ -4,7 +4,6 @@ import {
   Copy,
   Minus,
   Moon,
-  PanelLeft,
   Search,
   Square,
   Sun,
@@ -20,15 +19,12 @@ const SECTION_TAB_LABELS: Record<ActivitySection, string> = {
   explorer: "Vector Explorer",
   runtimes: "Local Runtimes",
   store: "Engine Store",
-  settings: "Workspace Settings",
 };
 
 export function AdaptiveTitlebar() {
   const theme = useAppStore((s) => s.theme);
   const toggleTheme = useAppStore((s) => s.toggleTheme);
   const activeSection = useAppStore((s) => s.activeSection);
-  const sidebarOpen = useAppStore((s) => s.sidebarOpen);
-  const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen);
   const appStatus = useAppStore((s) => s.appStatus);
 
@@ -79,32 +75,21 @@ export function AdaptiveTitlebar() {
         isMac && "pl-[74px]",
       )}
     >
-      {/* Left: Brand + Sidebar Toggle */}
+      {/* Left: Brand + Active Section Label */}
       <div
         data-tauri-drag-region
         className="flex h-full items-center gap-2 px-3"
       >
         <EmbedBayLogo size={16} />
-        <span className="font-semibold tracking-tight text-[var(--text-primary)]">
-          EmbedBay
+        <span className="inline-flex items-baseline gap-1.5 leading-none">
+          <span className="font-semibold tracking-tight text-[var(--text-primary)]">
+            EmbedBay
+          </span>
+          <span className="text-[var(--border-strong)]">/</span>
+          <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+            {SECTION_TAB_LABELS[activeSection]}
+          </span>
         </span>
-        <button
-          type="button"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          title={sidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
-          aria-label={sidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
-          className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] cursor-pointer"
-        >
-          <PanelLeft className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      {/* Workspace Tab Bar Stub */}
-      <div className="flex h-full items-end gap-1 px-1">
-        <div className="flex h-7 items-center gap-2 rounded-t-md border border-b-0 border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 text-[11px] font-medium text-[var(--text-primary)]">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent-primary)]" />
-          <span>{SECTION_TAB_LABELS[activeSection]}</span>
-        </div>
       </div>
 
       {/* Center Drag Spacer + Ctrl+K Quick Search Trigger */}
@@ -119,13 +104,13 @@ export function AdaptiveTitlebar() {
         >
           <Search className="h-3 w-3 shrink-0" />
           <span className="truncate">Search commands, instances, tags...</span>
-          <kbd className="ml-auto rounded border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-1.5 py-0.2 font-mono text-[10px] text-[var(--text-secondary)]">
+          <kbd className="ml-auto rounded border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-1.5 py-0.5 font-mono text-[10px] leading-none text-[var(--text-secondary)]">
             {shortcutLabel}
           </kbd>
         </button>
       </div>
 
-      {/* Right: Theme Switcher + Native-style Window Controls (Windows / Linux) */}
+      {/* Right: Theme Switcher + Native-style Window Controls */}
       <div className="flex h-full items-center">
         <button
           type="button"
@@ -136,7 +121,7 @@ export function AdaptiveTitlebar() {
           aria-label={
             theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"
           }
-          className="mr-1 inline-flex h-7 w-7 items-center justify-center rounded text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] cursor-pointer"
+          className="mr-1.5 inline-flex h-7 w-7 items-center justify-center rounded text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] cursor-pointer"
         >
           {theme === "dark" ? (
             <Sun className="h-3.5 w-3.5" />

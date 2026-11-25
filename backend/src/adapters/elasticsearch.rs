@@ -6,6 +6,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use serde_json::{json, Value};
 
 use crate::adapters::{
+    format_http_status_error, format_invalid_json_error, format_reqwest_error,
     http_client_for_url, AdapterError, BrowseRecordsRequest, BrowseRecordsResponse,
     CollectionSchema, CollectionSummary, ConnectionTestResult, CreateCollectionRequest,
     FilterCondition, FilterLogic, FilterSpec, PayloadFieldSchema, SearchRequest, SearchResponse,
@@ -65,20 +66,27 @@ impl ElasticsearchAdapter {
         if let Some(b) = body {
             req = req.json(&b);
         }
-        let resp = req.send().await.map_err(|e| AdapterError::Http(e.to_string()))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
         let status = resp.status();
-        let text = resp.text().await.map_err(|e| AdapterError::Http(e.to_string()))?;
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
         if !status.is_success() {
-            return Err(AdapterError::Api(format!(
-                "Elasticsearch {} returned {}: {}",
-                path, status, text
+            return Err(AdapterError::Api(format_http_status_error(
+                "Elasticsearch",
+                status,
+                &text,
             )));
         }
         if text.trim().is_empty() {
             return Ok(Value::Null);
         }
         serde_json::from_str(&text)
-            .map_err(|e| AdapterError::Api(format!("Invalid Elasticsearch JSON: {}", e)))
+            .map_err(|_| AdapterError::Api(format_invalid_json_error("Elasticsearch", &text)))
     }
 
     async fn detect_vector_field(
@@ -189,7 +197,12 @@ impl VectorDbAdapter for ElasticsearchAdapter {
         let resp = self
             .send_json(reqwest::Method::GET, "/_cat/indices?format=json", None)
             .await?;
-        let arr = resp.as_array().cloned().unwrap_or_default();
+        let arr = resp.as_array().cloned().ok_or_else(|| {
+            AdapterError::Api(
+                "Unexpected response from Elasticsearch. Check endpoint URL or credentials."
+                    .to_string(),
+            )
+        })?;
         let mut out = Vec::new();
         for item in arr {
             let name = item

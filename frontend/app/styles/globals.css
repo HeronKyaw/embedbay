@@ -75,11 +75,26 @@ dialog:modal {
   padding: 0;
   background: transparent;
   color: var(--text-primary);
-  max-width: min(94vw, 720px);
+  max-width: min(94vw, 1080px);
   max-height: 90vh;
 }
 
 dialog::backdrop {
   background: rgba(5, 8, 14, 0.72);
   backdrop-filter: blur(4px);
+}
+
+@supports (position-area: block-end span-inline-end) and (anchor-name: --a) {
+  .explorer-switcher-trigger {
+    anchor-name: --explorer-switcher;
+  }
+
+  .explorer-switcher-panel {
+    position: fixed;
+    position-anchor: --explorer-switcher;
+    position-area: block-end span-inline-end;
+    position-try-fallbacks: flip-inline, flip-block, flip-block flip-inline;
+    inset: auto;
+    margin-block-start: 6px;
+  }
 }

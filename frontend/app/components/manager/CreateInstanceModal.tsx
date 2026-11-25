@@ -1,5 +1,6 @@
 import * as React from "react";
 import { AlertTriangle, CheckCircle2, FolderOpen, Wand2 } from "lucide-react";
+import { TagPicker } from "@/components/sidebar/TagPicker";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
@@ -14,6 +15,21 @@ import { useAppStore } from "@/stores/useAppStore";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
 import { SWATCH_PRESETS } from "@/types/system";
 
+function suggestUniqueInstanceName(
+  baseName: string,
+  existingNames: string[],
+): string {
+  const taken = new Set(existingNames.map((n) => n.trim().toLowerCase()));
+  if (!taken.has(baseName.trim().toLowerCase())) {
+    return baseName;
+  }
+  let suffix = 2;
+  while (taken.has(`${baseName} ${suffix}`.trim().toLowerCase())) {
+    suffix += 1;
+  }
+  return `${baseName} ${suffix}`;
+}
+
 export function CreateInstanceModal({
   onPickDirectory,
 }: {
@@ -25,8 +41,8 @@ export function CreateInstanceModal({
   const closeModal = useRuntimeStore((s) => s.closeInstanceModal);
   const catalog = useRuntimeStore((s) => s.catalog);
   const installedEngines = useRuntimeStore((s) => s.installedEngines);
+  const instances = useRuntimeStore((s) => s.instances);
   const groups = useRuntimeStore((s) => s.groups);
-  const tags = useRuntimeStore((s) => s.tags);
   const refreshInstances = useRuntimeStore((s) => s.refreshInstances);
   const setActiveSection = useAppStore((s) => s.setActiveSection);
 
@@ -54,6 +70,12 @@ export function CreateInstanceModal({
   );
   const catalogEntry = catalog.find((c) => c.engine_type === engineType);
   const isEmbedded = catalogEntry?.embedded ?? engineType === "lancedb";
+  const trimmedName = name.trim();
+  const nameConflict =
+    trimmedName.length > 0 &&
+    instances.some(
+      (i) => i.id !== editing?.id && i.name.trim() === trimmedName,
+    );
 
   React.useEffect(() => {
     if (!open) return;
@@ -88,7 +110,15 @@ export function CreateInstanceModal({
 
     setEngineType(chosenEngine);
     setEngineVersion(matchingInstalled[0]?.version ?? "");
-    setName(`Local ${entry?.display_name ?? chosenEngine}`);
+    const existingNames = useRuntimeStore
+      .getState()
+      .instances.map((i) => i.name);
+    setName(
+      suggestUniqueInstanceName(
+        `Local ${entry?.display_name ?? chosenEngine}`,
+        existingNames,
+      ),
+    );
     setDescription("");
     setColor(SWATCH_PRESETS[0].hex);
     setGroupId("");
@@ -124,7 +154,12 @@ export function CreateInstanceModal({
     );
     setEngineVersion(matching[0]?.version ?? "");
     if (!editing) {
-      setName(`Local ${entry?.display_name ?? nextEngine}`);
+      setName(
+        suggestUniqueInstanceName(
+          `Local ${entry?.display_name ?? nextEngine}`,
+          instances.map((i) => i.name),
+        ),
+      );
       const basePort = entry?.default_port ?? 6333;
       setPort(basePort);
       setGrpcPort(
@@ -163,15 +198,17 @@ export function CreateInstanceModal({
     }
   };
 
-  const toggleTag = (id: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id],
-    );
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || busy) return;
+
+    if (nameConflict) {
+      toast.error(
+        "Instance name already exists",
+        "Choose a unique name for this instance.",
+      );
+      return;
+    }
 
     if (!isEmbedded && !engineVersion) {
       toast.error(
@@ -325,8 +362,18 @@ export function CreateInstanceModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Local Qdrant Dev"
-              className="h-8 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2.5 text-xs text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+              className={cn(
+                "h-8 w-full rounded-md border bg-[var(--bg-canvas)] px-2.5 text-xs text-[var(--text-primary)] focus:outline-none",
+                nameConflict
+                  ? "border-[var(--status-error)] focus:border-[var(--status-error)]"
+                  : "border-[var(--border-strong)] focus:border-[var(--accent-primary)]",
+              )}
             />
+            {nameConflict && (
+              <p className="mt-1 text-[11px] text-[var(--status-error)]">
+                An instance with this name already exists.
+              </p>
+            )}
           </div>
 
           <div>
@@ -501,38 +548,10 @@ export function CreateInstanceModal({
             </div>
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-[11px] font-medium text-[var(--text-secondary)]">
-              Tags
-            </label>
-            {tags.length === 0 ? (
-              <p className="text-[11px] text-[var(--text-muted)]">
-                Create tags from the sidebar Tags bar.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-1">
-                {tags.map((t) => {
-                  const active = selectedTags.includes(t.id);
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => toggleTag(t.id)}
-                      style={{ "--pill-color": t.color } as React.CSSProperties}
-                      className={cn(
-                        "tag-pill inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium cursor-pointer",
-                        active
-                          ? "ring-1 ring-[var(--text-primary)]"
-                          : "opacity-55 hover:opacity-90",
-                      )}
-                    >
-                      {t.name}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <TagPicker
+            selectedTagIds={selectedTags}
+            onChange={setSelectedTags}
+          />
         </div>
 
         {/* Boot Autostart & Idle Auto-Stop */}

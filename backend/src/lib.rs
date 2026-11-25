@@ -147,6 +147,7 @@ pub fn run() {
             commands::connections::update_embedding_profile,
             commands::connections::delete_embedding_profile,
             commands::connections::test_embedding_profile,
+            commands::connections::test_embedding_profile_draft,
             commands::connections::embed_texts,
             commands::explorer::test_connection,
             commands::explorer::list_collections,

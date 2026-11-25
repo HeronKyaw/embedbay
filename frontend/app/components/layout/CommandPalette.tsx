@@ -31,6 +31,7 @@ import {
 import { setAutostartEnabled } from "@/ipc/system";
 import { useAppStore } from "@/stores/useAppStore";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
+import { useTabsStore } from "@/stores/useTabsStore";
 import type { ActivitySection } from "@/types/system";
 
 export function CommandPalette() {
@@ -38,6 +39,7 @@ export function CommandPalette() {
   const setOpen = useAppStore((s) => s.setCommandPaletteOpen);
   const toggleCommandPalette = useAppStore((s) => s.toggleCommandPalette);
   const setActiveSection = useAppStore((s) => s.setActiveSection);
+  const setSettingsOpen = useAppStore((s) => s.setSettingsOpen);
   const theme = useAppStore((s) => s.theme);
   const toggleTheme = useAppStore((s) => s.toggleTheme);
   const appStatus = useAppStore((s) => s.appStatus);
@@ -47,6 +49,9 @@ export function CommandPalette() {
   const metrics = useRuntimeStore((s) => s.metrics);
   const tags = useRuntimeStore((s) => s.tags);
   const toggleTagFilter = useRuntimeStore((s) => s.toggleTagFilter);
+  const setSelectedConnectionKey = useRuntimeStore(
+    (s) => s.setSelectedConnectionKey,
+  );
   const openCreateInstanceModal = useRuntimeStore(
     (s) => s.openCreateInstanceModal,
   );
@@ -54,6 +59,7 @@ export function CommandPalette() {
     (s) => s.setActiveLogInstanceId,
   );
   const refreshInstances = useRuntimeStore((s) => s.refreshInstances);
+  const setActiveTabId = useTabsStore((s) => s.setActiveTabId);
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -89,25 +95,40 @@ export function CommandPalette() {
       <CommandList>
         <CommandEmpty>No matching commands found.</CommandEmpty>
         <CommandGroup heading="Workspace Navigation">
-          <CommandItem onSelect={() => navigate("explorer")}>
+          <CommandItem
+            value="nav-explorer-open-vector-explorer"
+            onSelect={() => navigate("explorer")}
+          >
             <Database className="h-3.5 w-3.5 text-[var(--accent-primary)]" />
             <span>Open Vector Explorer</span>
             <CommandShortcut>Explorer</CommandShortcut>
           </CommandItem>
-          <CommandItem onSelect={() => navigate("runtimes")}>
+          <CommandItem
+            value="nav-runtimes-open-local-runtimes"
+            onSelect={() => navigate("runtimes")}
+          >
             <Boxes className="h-3.5 w-3.5 text-[var(--accent-secondary)]" />
             <span>Open Local Runtimes</span>
             <CommandShortcut>Runtimes</CommandShortcut>
           </CommandItem>
-          <CommandItem onSelect={() => navigate("store")}>
+          <CommandItem
+            value="nav-store-open-engine-store"
+            onSelect={() => navigate("store")}
+          >
             <PackagePlus className="h-3.5 w-3.5 text-[var(--accent-ai)]" />
             <span>Open Engine Store</span>
             <CommandShortcut>Store</CommandShortcut>
           </CommandItem>
-          <CommandItem onSelect={() => navigate("settings")}>
+          <CommandItem
+            value="nav-settings-open-workspace-settings"
+            onSelect={() => {
+              setOpen(false);
+              setSettingsOpen(true);
+            }}
+          >
             <Settings className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
             <span>Open Settings</span>
-            <CommandShortcut>Settings</CommandShortcut>
+            <CommandShortcut>Ctrl+,</CommandShortcut>
           </CommandItem>
         </CommandGroup>
 
@@ -115,6 +136,7 @@ export function CommandPalette() {
 
         <CommandGroup heading="Runtime Actions">
           <CommandItem
+            value="runtime-create-new-local-instance"
             onSelect={() => {
               setOpen(false);
               openCreateInstanceModal();
@@ -125,6 +147,7 @@ export function CommandPalette() {
             <CommandShortcut>Wizard</CommandShortcut>
           </CommandItem>
           <CommandItem
+            value="runtime-stop-all-running-services"
             onSelect={() => {
               setOpen(false);
               void stopAllInstances()
@@ -147,6 +170,7 @@ export function CommandPalette() {
               <React.Fragment key={inst.id}>
                 {!embedded && (
                   <CommandItem
+                    value={`instance-toggle-${inst.id}-${inst.name}-${inst.engine_type}`}
                     onSelect={() => {
                       setOpen(false);
                       void (running
@@ -182,6 +206,7 @@ export function CommandPalette() {
                 )}
                 {!embedded && (
                   <CommandItem
+                    value={`instance-logs-${inst.id}-${inst.name}-${inst.engine_type}`}
                     onSelect={() => {
                       setActiveLogInstanceId(inst.id);
                       setActiveSection("runtimes");
@@ -205,8 +230,12 @@ export function CommandPalette() {
               {tags.map((tag) => (
                 <CommandItem
                   key={tag.id}
+                  value={`tag-filter-${tag.id}-${tag.name}`}
                   onSelect={() => {
                     toggleTagFilter(tag.id);
+                    setSelectedConnectionKey(null);
+                    setActiveTabId(null);
+                    setActiveSection("explorer");
                     setOpen(false);
                   }}
                 >
@@ -226,6 +255,7 @@ export function CommandPalette() {
 
         <CommandGroup heading="Appearance & System">
           <CommandItem
+            value="system-toggle-theme-dark-light"
             onSelect={() => {
               toggleTheme();
               setOpen(false);
@@ -241,7 +271,10 @@ export function CommandPalette() {
             </span>
             <CommandShortcut>Theme</CommandShortcut>
           </CommandItem>
-          <CommandItem onSelect={() => void handleToggleAutostart()}>
+          <CommandItem
+            value="system-toggle-os-startup-autostart"
+            onSelect={() => void handleToggleAutostart()}
+          >
             <Power className="h-3.5 w-3.5 text-[var(--status-running)]" />
             <span>
               {appStatus?.autostart_enabled

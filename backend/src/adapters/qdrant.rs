@@ -6,6 +6,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use serde_json::{json, Value};
 
 use crate::adapters::{
+    format_http_status_error, format_invalid_json_error, format_reqwest_error,
     http_client_for_url, AdapterError, BrowseRecordsRequest, BrowseRecordsResponse,
     CollectionSchema, CollectionSummary, ConnectionTestResult, CreateCollectionRequest,
     FilterCondition, FilterLogic, FilterSpec, PayloadFieldSchema, SearchRequest, SearchResponse,
@@ -55,14 +56,24 @@ impl QdrantAdapter {
         if let Some(b) = body {
             req = req.json(&b);
         }
-        let resp = req.send().await.map_err(|e| AdapterError::Http(e.to_string()))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
         let status = resp.status();
-        let text = resp.text().await.map_err(|e| AdapterError::Http(e.to_string()))?;
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| AdapterError::Http(format_reqwest_error(&e)))?;
         if !status.is_success() {
-            return Err(AdapterError::Api(format!("Qdrant {} returned {}: {}", path, status, text)));
+            return Err(AdapterError::Api(format_http_status_error(
+                "Qdrant",
+                status,
+                &text,
+            )));
         }
         serde_json::from_str::<Value>(&text)
-            .map_err(|e| AdapterError::Api(format!("Invalid Qdrant JSON response: {}", e)))
+            .map_err(|_| AdapterError::Api(format_invalid_json_error("Qdrant", &text)))
     }
 }
 
@@ -204,6 +215,8 @@ impl VectorDbAdapter for QdrantAdapter {
     async fn test_connection(&self) -> Result<ConnectionTestResult, AdapterError> {
         let start = Instant::now();
         let body = self.send_json(reqwest::Method::GET, "/", None).await?;
+        self.send_json(reqwest::Method::GET, "/collections", None)
+            .await?;
         let latency_ms = start.elapsed().as_millis() as u64;
         let version = body
             .get("version")
@@ -224,15 +237,19 @@ impl VectorDbAdapter for QdrantAdapter {
         let resp = self
             .send_json(reqwest::Method::GET, "/collections", None)
             .await?;
-        let names: Vec<String> = resp
+        let arr = resp
             .pointer("/result/collections")
             .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|c| c.get("name").and_then(|n| n.as_str()).map(ToString::to_string))
-                    .collect()
-            })
-            .unwrap_or_default();
+            .ok_or_else(|| {
+                AdapterError::Api(
+                    "Unexpected response from Qdrant. Check endpoint URL or credentials."
+                        .to_string(),
+                )
+            })?;
+        let names: Vec<String> = arr
+            .iter()
+            .filter_map(|c| c.get("name").and_then(|n| n.as_str()).map(ToString::to_string))
+            .collect();
 
         let mut summaries = Vec::with_capacity(names.len());
         for name in names {

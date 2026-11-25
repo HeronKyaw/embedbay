@@ -7,6 +7,7 @@ import { isTauriRuntime } from "@/ipc/system";
 import type {
   CatalogEngineView,
   ConnectionGroup,
+  HostResourceMetrics,
   InstalledEngine,
   InstallProgressEvent,
   InstanceLogEvent,
@@ -18,6 +19,15 @@ import type {
   Tag,
 } from "@/types/runtime";
 
+const EMPTY_HOST_METRICS: HostResourceMetrics = {
+  cpu_percent: 0,
+  cpu_cores: 0,
+  memory_used_bytes: 0,
+  memory_total_bytes: 0,
+  disk_available_bytes: 0,
+  disk_total_bytes: 0,
+};
+
 export type SidebarStatusFilter = "all" | "running" | "stopped" | "remote";
 
 interface RuntimeState {
@@ -28,7 +38,10 @@ interface RuntimeState {
   tags: Tag[];
   metrics: Record<string, InstanceMetrics>;
   totalRamBytes: number;
+  totalCpuPercent: number;
+  totalDiskBytes: number;
   runningCount: number;
+  hostMetrics: HostResourceMetrics;
   installProgress: Record<string, InstallProgressEvent>;
   logsByInstance: Record<string, LogEntry[]>;
   selectedConnectionKey: string | null; // e.g. "local:<id>" or "remote:<id>"
@@ -70,7 +83,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   tags: [],
   metrics: {},
   totalRamBytes: 0,
+  totalCpuPercent: 0,
+  totalDiskBytes: 0,
   runningCount: 0,
+  hostMetrics: EMPTY_HOST_METRICS,
   installProgress: {},
   logsByInstance: {},
   selectedConnectionKey: null,
@@ -103,7 +119,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         tags,
         metrics: summary.instances,
         totalRamBytes: summary.total_ram_bytes,
+        totalCpuPercent: summary.total_cpu_percent,
+        totalDiskBytes: summary.total_disk_bytes,
         runningCount: summary.running_count,
+        hostMetrics: summary.host,
       });
     } finally {
       set({ loading: false });
@@ -127,7 +146,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       instances,
       metrics: summary.instances,
       totalRamBytes: summary.total_ram_bytes,
+      totalCpuPercent: summary.total_cpu_percent,
+      totalDiskBytes: summary.total_disk_bytes,
       runningCount: summary.running_count,
+      hostMetrics: summary.host,
     });
   },
 
@@ -197,7 +219,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     set({
       metrics: summary.instances,
       totalRamBytes: summary.total_ram_bytes,
+      totalCpuPercent: summary.total_cpu_percent,
+      totalDiskBytes: summary.total_disk_bytes,
       runningCount: summary.running_count,
+      hostMetrics: summary.host,
     }),
 
   applyStatusChanged: (evt) => {
@@ -214,20 +239,27 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         last_error: evt.last_error,
         last_activity_at: Math.floor(Date.now() / 1000),
       };
+      const isRunningNow = evt.status === "running";
       const updated = {
         ...s.metrics,
         [evt.instance_id]: {
           ...prev,
           status: evt.status,
           pid: evt.pid,
+          ram_bytes: isRunningNow ? prev.ram_bytes : 0,
+          cpu_percent: isRunningNow ? prev.cpu_percent : 0,
           last_error: evt.last_error,
         },
       };
       const values = Object.values(updated);
+      const running = values.filter((m) => m.status === "running");
+      const rawCpu = running.reduce((acc, m) => acc + (m.cpu_percent ?? 0), 0);
       return {
         metrics: updated,
-        runningCount: values.filter((m) => m.status === "running").length,
-        totalRamBytes: values.reduce((acc, m) => acc + m.ram_bytes, 0),
+        runningCount: running.length,
+        totalRamBytes: running.reduce((acc, m) => acc + m.ram_bytes, 0),
+        totalCpuPercent: Math.min(100, Math.max(0, rawCpu)),
+        totalDiskBytes: values.reduce((acc, m) => acc + (m.disk_bytes ?? 0), 0),
       };
     });
     if (evt.status === "running" || evt.status === "stopped" || evt.status === "error") {
