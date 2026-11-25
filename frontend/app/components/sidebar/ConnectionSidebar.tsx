@@ -3,6 +3,7 @@ import {
   ChevronDown,
   ChevronRight,
   FolderPlus,
+  Globe,
   Pencil,
   Play,
   Plus,
@@ -14,6 +15,7 @@ import { ConnectionItem } from "@/components/sidebar/ConnectionItem";
 import { GroupIcon, GroupModal } from "@/components/sidebar/GroupModal";
 import { TagFilterBar } from "@/components/sidebar/TagFilterBar";
 import { toast } from "@/components/ui/toast";
+import { deleteRemoteConnection } from "@/ipc/connections";
 import { deleteGroup, updateGroup } from "@/ipc/groupsTags";
 import { startGroupInstances, stopGroupInstances } from "@/ipc/instances";
 import { cn } from "@/lib/utils";
@@ -22,7 +24,9 @@ import {
   type SidebarStatusFilter,
   useRuntimeStore,
 } from "@/stores/useRuntimeStore";
-import type { ConnectionGroup } from "@/types/runtime";
+import { useTabsStore } from "@/stores/useTabsStore";
+import type { RemoteConnection } from "@/types/explorer";
+import type { ConnectionGroup, Tag } from "@/types/runtime";
 
 const STATUS_CHIPS: readonly { id: SidebarStatusFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -31,12 +35,127 @@ const STATUS_CHIPS: readonly { id: SidebarStatusFilter; label: string }[] = [
   { id: "remote", label: "Remote" },
 ];
 
-export function ConnectionSidebar({
-  extraRemoteTree,
-  onSelectLocalInstance,
+function RemoteConnectionRow({
+  conn,
+  tags,
+  onSelect,
 }: {
-  extraRemoteTree?: React.ReactNode;
-  onSelectLocalInstance?: (instanceId: string) => void;
+  conn: RemoteConnection;
+  tags: Tag[];
+  onSelect?: () => void;
+}) {
+  const selectedConnectionKey = useRuntimeStore((s) => s.selectedConnectionKey);
+  const setSelectedConnectionKey = useRuntimeStore(
+    (s) => s.setSelectedConnectionKey,
+  );
+  const openRemoteModal = useTabsStore((s) => s.openRemoteModal);
+  const refreshConnectionsAndProfiles = useTabsStore(
+    (s) => s.refreshConnectionsAndProfiles,
+  );
+
+  const key = `remote:${conn.id}`;
+  const selected = selectedConnectionKey === key;
+  const itemTags = tags.filter((t) => conn.tag_ids.includes(t.id));
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await deleteRemoteConnection(conn.id);
+      if (selected) setSelectedConnectionKey(null);
+      await refreshConnectionsAndProfiles();
+      toast.info(`Removed "${conn.name}"`);
+    } catch (err: unknown) {
+      toast.error(
+        "Failed to remove connection",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  };
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => {
+        setSelectedConnectionKey(key);
+        onSelect?.();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setSelectedConnectionKey(key);
+          onSelect?.();
+        }
+      }}
+      style={
+        conn.color
+          ? { borderLeftColor: conn.color, borderLeftWidth: "3px" }
+          : undefined
+      }
+      className={cn(
+        "group relative flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors cursor-pointer select-none",
+        selected
+          ? "border-[var(--accent-primary)]/60 bg-[var(--bg-elevated)]"
+          : "border-transparent hover:border-[var(--border-subtle)] hover:bg-[var(--bg-elevated)]/70",
+      )}
+    >
+      <Globe
+        className="h-3 w-3 shrink-0"
+        style={{ color: conn.color ?? "var(--accent-secondary)" }}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1">
+          <span className="truncate text-xs font-medium text-[var(--text-primary)]">
+            {conn.name}
+          </span>
+        </div>
+        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-[var(--text-muted)]">
+          <span className="uppercase">{conn.engine_type}</span>
+          <span>· remote</span>
+          {itemTags.length > 0 && (
+            <span className="flex items-center gap-0.5">
+              {itemTags.slice(0, 3).map((t) => (
+                <span
+                  key={t.id}
+                  title={t.name}
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: t.color }}
+                />
+              ))}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            openRemoteModal(conn);
+          }}
+          title="Edit Remote Connection"
+          className="inline-flex h-5 w-5 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] cursor-pointer"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => void handleDelete(e)}
+          title="Delete Remote Connection"
+          className="inline-flex h-5 w-5 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--status-error)]/15 hover:text-[var(--status-error)] cursor-pointer"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function ConnectionSidebar({
+  onSelectConnection,
+}: {
+  onSelectConnection?: () => void;
 }) {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const instances = useRuntimeStore((s) => s.instances);
@@ -53,6 +172,9 @@ export function ConnectionSidebar({
   );
   const refreshGroupsAndTags = useRuntimeStore((s) => s.refreshGroupsAndTags);
 
+  const remoteConnections = useTabsStore((s) => s.remoteConnections);
+  const openRemoteModal = useTabsStore((s) => s.openRemoteModal);
+
   const [width, setWidth] = React.useState(260);
   const [groupModalOpen, setGroupModalOpen] = React.useState(false);
   const [editingGroup, setEditingGroup] =
@@ -63,7 +185,10 @@ export function ConnectionSidebar({
     const startX = e.clientX;
     const startWidth = width;
     const onMove = (moveEvent: MouseEvent) => {
-      const next = Math.min(400, Math.max(220, startWidth + moveEvent.clientX - startX));
+      const next = Math.min(
+        400,
+        Math.max(220, startWidth + moveEvent.clientX - startX),
+      );
       setWidth(next);
     };
     const onUp = () => {
@@ -92,11 +217,32 @@ export function ConnectionSidebar({
             }
           }
           const st = metrics[inst.id]?.status ?? "stopped";
-          if (statusFilter === "running" && st !== "running" && st !== "embedded") {
+          if (
+            statusFilter === "running" &&
+            st !== "running" &&
+            st !== "embedded"
+          ) {
             return false;
           }
           if (statusFilter === "stopped" && st === "running") {
             return false;
+          }
+          return true;
+        });
+
+  const filteredRemotes =
+    statusFilter === "running" || statusFilter === "stopped"
+      ? []
+      : remoteConnections.filter((conn) => {
+          if (query) {
+            const hay =
+              `${conn.name} ${conn.engine_type} ${conn.endpoint_url} ${conn.description ?? ""}`.toLowerCase();
+            if (!hay.includes(query)) return false;
+          }
+          if (selectedTagIds.length > 0) {
+            if (!selectedTagIds.every((tid) => conn.tag_ids.includes(tid))) {
+              return false;
+            }
           }
           return true;
         });
@@ -130,8 +276,7 @@ export function ConnectionSidebar({
     try {
       const results = await startGroupInstances(group.id);
       const okCount = results.filter((r) => r.ok).length;
-      const failCount = results.length - okCount;
-      if (failCount === 0) {
+      if (okCount === results.length) {
         toast.success(`Started ${okCount} instance(s) in "${group.name}"`);
       } else {
         toast.error(
@@ -159,7 +304,8 @@ export function ConnectionSidebar({
     }
   };
 
-  const ungrouped = filteredInstances.filter((i) => !i.group_id);
+  const ungroupedLocal = filteredInstances.filter((i) => !i.group_id);
+  const ungroupedRemote = filteredRemotes.filter((r) => !r.group_id);
 
   return (
     <aside
@@ -186,10 +332,10 @@ export function ConnectionSidebar({
               type="button"
               onClick={() => setStatusFilter(chip.id)}
               className={cn(
-                "flex-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors cursor-pointer",
+                "flex-1 rounded border px-1.5 py-0.5 text-[10px] font-medium transition-colors cursor-pointer",
                 statusFilter === chip.id
-                  ? "bg-[var(--accent-primary)]/15 text-[var(--accent-primary)] border border-[var(--accent-primary)]/40"
-                  : "text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] border border-transparent",
+                  ? "border-[var(--accent-primary)]/40 bg-[var(--accent-primary)]/15 text-[var(--accent-primary)]"
+                  : "border-transparent text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]",
               )}
             >
               {chip.label}
@@ -219,6 +365,15 @@ export function ConnectionSidebar({
           </button>
           <button
             type="button"
+            onClick={() => openRemoteModal()}
+            title="Add Remote Connection"
+            aria-label="Add Remote Connection"
+            className="inline-flex h-5 w-5 items-center justify-center rounded text-[var(--accent-secondary)] hover:bg-[var(--bg-elevated)] cursor-pointer"
+          >
+            <Globe className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
             onClick={() => openCreateInstanceModal()}
             title="New Local Instance"
             aria-label="New Local Instance"
@@ -235,6 +390,10 @@ export function ConnectionSidebar({
           const groupInstances = filteredInstances.filter(
             (i) => i.group_id === group.id,
           );
+          const groupRemotes = filteredRemotes.filter(
+            (r) => r.group_id === group.id,
+          );
+          const totalInGroup = groupInstances.length + groupRemotes.length;
           return (
             <div
               key={group.id}
@@ -256,7 +415,7 @@ export function ConnectionSidebar({
                     {group.name}
                   </span>
                   <span className="ml-1 font-mono text-[10px] text-[var(--text-muted)]">
-                    {groupInstances.length}
+                    {totalInGroup}
                   </span>
                 </button>
 
@@ -264,8 +423,7 @@ export function ConnectionSidebar({
                   <button
                     type="button"
                     onClick={() => void handleGroupStartAll(group)}
-                    title="Start All in Group"
-                    aria-label={`Start all in ${group.name}`}
+                    title="Start All Local in Group"
                     className="inline-flex h-5 w-5 items-center justify-center rounded text-[var(--status-running)] hover:bg-[var(--status-running)]/15 cursor-pointer"
                   >
                     <Play className="h-2.5 w-2.5 fill-current" />
@@ -273,8 +431,7 @@ export function ConnectionSidebar({
                   <button
                     type="button"
                     onClick={() => void handleGroupStopAll(group)}
-                    title="Stop All in Group"
-                    aria-label={`Stop all in ${group.name}`}
+                    title="Stop All Local in Group"
                     className="inline-flex h-5 w-5 items-center justify-center rounded text-[var(--status-error)] hover:bg-[var(--status-error)]/15 cursor-pointer"
                   >
                     <Square className="h-2.5 w-2.5 fill-current" />
@@ -286,7 +443,6 @@ export function ConnectionSidebar({
                       setGroupModalOpen(true);
                     }}
                     title="Edit Group"
-                    aria-label={`Edit ${group.name}`}
                     className="inline-flex h-5 w-5 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] cursor-pointer"
                   >
                     <Pencil className="h-2.5 w-2.5" />
@@ -295,7 +451,6 @@ export function ConnectionSidebar({
                     type="button"
                     onClick={() => void handleDeleteGroup(group)}
                     title="Delete Group"
-                    aria-label={`Delete ${group.name}`}
                     className="inline-flex h-5 w-5 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--status-error)]/15 hover:text-[var(--status-error)] cursor-pointer"
                   >
                     <Trash2 className="h-2.5 w-2.5" />
@@ -305,19 +460,29 @@ export function ConnectionSidebar({
 
               {!group.is_collapsed && (
                 <div className="space-y-0.5 border-t border-[var(--border-subtle)] p-1">
-                  {groupInstances.length === 0 ? (
+                  {totalInGroup === 0 ? (
                     <div className="px-2 py-1.5 text-[10px] text-[var(--text-muted)]">
-                      No matching instances in group
+                      No matching connections in group
                     </div>
                   ) : (
-                    groupInstances.map((inst) => (
-                      <ConnectionItem
-                        key={inst.id}
-                        instance={inst}
-                        tags={tags}
-                        onSelect={() => onSelectLocalInstance?.(inst.id)}
-                      />
-                    ))
+                    <>
+                      {groupInstances.map((inst) => (
+                        <ConnectionItem
+                          key={inst.id}
+                          instance={inst}
+                          tags={tags}
+                          onSelect={onSelectConnection}
+                        />
+                      ))}
+                      {groupRemotes.map((conn) => (
+                        <RemoteConnectionRow
+                          key={conn.id}
+                          conn={conn}
+                          tags={tags}
+                          onSelect={onSelectConnection}
+                        />
+                      ))}
+                    </>
                   )}
                 </div>
               )}
@@ -325,35 +490,45 @@ export function ConnectionSidebar({
           );
         })}
 
-        {/* Ungrouped Local Instances */}
-        {ungrouped.length > 0 && (
+        {ungroupedLocal.length > 0 && (
           <div className="space-y-0.5">
-            {groups.length > 0 && (
-              <div className="px-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-                Ungrouped
-              </div>
-            )}
-            {ungrouped.map((inst) => (
+            <div className="px-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              Local Instances
+            </div>
+            {ungroupedLocal.map((inst) => (
               <ConnectionItem
                 key={inst.id}
                 instance={inst}
                 tags={tags}
-                onSelect={() => onSelectLocalInstance?.(inst.id)}
+                onSelect={onSelectConnection}
               />
             ))}
           </div>
         )}
 
-        {extraRemoteTree}
+        {ungroupedRemote.length > 0 && (
+          <div className="space-y-0.5">
+            <div className="px-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              Remote Connections
+            </div>
+            {ungroupedRemote.map((conn) => (
+              <RemoteConnectionRow
+                key={conn.id}
+                conn={conn}
+                tags={tags}
+                onSelect={onSelectConnection}
+              />
+            ))}
+          </div>
+        )}
 
-        {filteredInstances.length === 0 && !extraRemoteTree && (
+        {filteredInstances.length === 0 && filteredRemotes.length === 0 && (
           <div className="rounded-lg border border-dashed border-[var(--border-subtle)] p-4 text-center">
             <p className="text-[11px] font-medium text-[var(--text-secondary)]">
-              No instances found
+              No connections found
             </p>
             <p className="mt-1 text-[10px] text-[var(--text-muted)]">
-              Install Qdrant or Chroma in the Engine Store, then create an
-              instance.
+              Create a local instance or add a remote vector DB connection.
             </p>
           </div>
         )}

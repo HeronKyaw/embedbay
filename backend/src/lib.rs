@@ -1,3 +1,4 @@
+pub mod adapters;
 pub mod commands;
 pub mod db;
 pub mod engines;
@@ -128,6 +129,25 @@ pub fn run() {
             commands::groups_tags::update_tag,
             commands::groups_tags::delete_tag,
             commands::groups_tags::set_entity_tags,
+            commands::connections::list_remote_connections,
+            commands::connections::create_remote_connection,
+            commands::connections::update_remote_connection,
+            commands::connections::delete_remote_connection,
+            commands::connections::list_embedding_profiles,
+            commands::connections::create_embedding_profile,
+            commands::connections::update_embedding_profile,
+            commands::connections::delete_embedding_profile,
+            commands::connections::test_embedding_profile,
+            commands::connections::embed_texts,
+            commands::explorer::test_connection,
+            commands::explorer::list_collections,
+            commands::explorer::get_collection_info,
+            commands::explorer::create_collection,
+            commands::explorer::delete_collection,
+            commands::explorer::browse_records,
+            commands::explorer::upsert_records,
+            commands::explorer::delete_records,
+            commands::explorer::search_vectors,
         ])
         .build(tauri::generate_context!())
         .expect("error while building EmbedBay Tauri application");

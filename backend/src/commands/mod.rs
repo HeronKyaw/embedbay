@@ -1,4 +1,6 @@
+pub mod connections;
 pub mod engines;
+pub mod explorer;
 pub mod groups_tags;
 pub mod instances;
 

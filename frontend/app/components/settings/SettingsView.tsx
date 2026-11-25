@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
+import { EmbeddingProfilesPanel } from "@/components/search/EmbeddingProfilesPanel";
 import { setAutostartEnabled } from "@/ipc/system";
 import { useAppStore } from "@/stores/useAppStore";
 import { SWATCH_PRESETS } from "@/types/system";
@@ -146,6 +147,8 @@ export function SettingsView({
           </dl>
         </section>
       </div>
+
+      <EmbeddingProfilesPanel />
 
       {extraPanels}
 
