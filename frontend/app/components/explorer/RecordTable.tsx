@@ -152,11 +152,11 @@ export function RecordTable({
           return (
             <div className="min-w-0">
               {doc && (
-                <div className="truncate text-xs text-[var(--text-primary)]">
+                <div className="truncate text-xs leading-snug text-[var(--text-primary)]">
                   {doc}
                 </div>
               )}
-              <div className="truncate font-mono text-[10px] text-[var(--text-secondary)]">
+              <div className="mt-0.5 truncate font-mono text-[10px] leading-snug text-[var(--text-secondary)]">
                 {payloadStr}
               </div>
             </div>
@@ -267,7 +267,7 @@ export function RecordTable({
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 48,
+    estimateSize: () => 56,
     overscan: 10,
   });
 

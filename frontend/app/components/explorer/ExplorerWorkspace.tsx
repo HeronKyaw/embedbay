@@ -185,6 +185,9 @@ function CollectionTabPane({
     Boolean(nextCursor) ||
     (records.length >= tab.limit &&
       (totalCount == null || tab.offset + records.length < totalCount));
+  const selectedIndex = tab.selectedRecord
+    ? records.findIndex((r) => r.id === tab.selectedRecord?.id)
+    : -1;
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -283,6 +286,23 @@ function CollectionTabPane({
       {tab.drawerOpen && (
         <MetadataDrawer
           record={tab.selectedRecord}
+          positionLabel={
+            selectedIndex >= 0
+              ? `${selectedIndex + 1} / ${records.length}`
+              : undefined
+          }
+          hasPrev={selectedIndex > 0}
+          hasNext={selectedIndex >= 0 && selectedIndex < records.length - 1}
+          onPrev={() => {
+            if (selectedIndex > 0) {
+              updateTab(tab.id, { selectedRecord: records[selectedIndex - 1] });
+            }
+          }}
+          onNext={() => {
+            if (selectedIndex >= 0 && selectedIndex < records.length - 1) {
+              updateTab(tab.id, { selectedRecord: records[selectedIndex + 1] });
+            }
+          }}
           onClose={() => updateTab(tab.id, { drawerOpen: false })}
           onFindSimilar={(rec) => {
             if (!tab.target || !tab.collection) return;

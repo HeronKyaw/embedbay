@@ -31,6 +31,9 @@ export function SearchPlayground({
 
   const activeProfileId =
     tab.searchProfileId || embeddingProfiles[0]?.id || "";
+  const selectedIndex = tab.selectedRecord
+    ? tab.searchResults.findIndex((r) => r.id === tab.selectedRecord?.id)
+    : -1;
 
   const handleRunSearch = async () => {
     if (!tab.target || !tab.collection || running) return;
@@ -351,6 +354,32 @@ export function SearchPlayground({
       {tab.drawerOpen && (
         <MetadataDrawer
           record={tab.selectedRecord}
+          positionLabel={
+            selectedIndex >= 0
+              ? `${selectedIndex + 1} / ${tab.searchResults.length}`
+              : undefined
+          }
+          hasPrev={selectedIndex > 0}
+          hasNext={
+            selectedIndex >= 0 && selectedIndex < tab.searchResults.length - 1
+          }
+          onPrev={() => {
+            if (selectedIndex > 0) {
+              updateTab(tab.id, {
+                selectedRecord: tab.searchResults[selectedIndex - 1],
+              });
+            }
+          }}
+          onNext={() => {
+            if (
+              selectedIndex >= 0 &&
+              selectedIndex < tab.searchResults.length - 1
+            ) {
+              updateTab(tab.id, {
+                selectedRecord: tab.searchResults[selectedIndex + 1],
+              });
+            }
+          }}
           onClose={() => updateTab(tab.id, { drawerOpen: false })}
           onFindSimilar={(rec) => {
             if (!tab.target || !tab.collection) return;
