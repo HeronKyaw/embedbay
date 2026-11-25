@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <DirectoryRef Id="INSTALLDIR">
+      <Component Id="EmbedBayRegistryComponent" Guid="9A1B2C3D-4E5F-4A6B-8C7D-1E2F3A4B5C6D">
+        <RegistryKey Root="HKCU" Key="Software\EmbedBay">
+          <RegistryValue Name="Installed" Type="integer" Value="1" KeyPath="yes" />
+          <RegistryValue Name="DataPreservedOnUpgrade" Type="integer" Value="1" />
+        </RegistryKey>
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>

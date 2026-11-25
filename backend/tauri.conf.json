@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.embedbay.app",
   "build": {
-    "beforeDevCommand": "npm --prefix ../frontend run dev",
+    "beforeDevCommand": "npm --prefix frontend run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "npm --prefix ../frontend run build",
+    "beforeBuildCommand": "npm --prefix frontend run build",
     "frontendDist": "../frontend/dist"
   },
   "app": {
@@ -17,6 +17,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["nsis", "msi"],
     "icon": [
       "../installer/icons/32x32.png",
@@ -28,6 +29,26 @@
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "../installer/windows/nsis/hooks.nsh"
+      },
+      "wix": {
+        "upgradeCode": "7C3D4A1E-8B2F-4F1A-9D6C-5E8A1B2C3D4E",
+        "fragmentPaths": ["../installer/windows/wix/embedbay-registry.wxs"],
+        "componentRefs": ["EmbedBayRegistryComponent"]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZGNTczMDUwOEYwOUUzQ0YKUldUUDR3bVBVREJYLzBtcXFDM045QVVKdHg2YjBlcWhzV3M4SHhsQXllZjdYME4vUVRSU1diSzMK",
+      "endpoints": [
+        "https://github.com/embedbay/embedbay/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

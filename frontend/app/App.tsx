@@ -11,6 +11,10 @@ import { CreateInstanceModal } from "@/components/manager/CreateInstanceModal";
 import { EngineCatalog } from "@/components/manager/EngineCatalog";
 import { ServicesDashboard } from "@/components/manager/ServicesDashboard";
 import { SettingsView } from "@/components/settings/SettingsView";
+import {
+  StorageAndUpdatesPanels,
+  UnusedEngineCleanupBanner,
+} from "@/components/settings/StorageAndUpdatesPanels";
 import { ConnectionSidebar } from "@/components/sidebar/ConnectionSidebar";
 import { ToastViewport, toast } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -192,8 +196,14 @@ export function App() {
                     onRestoreInstance={(inst) => void handleRestoreInstance(inst)}
                   />
                 )}
-                {activeSection === "store" && <EngineCatalog />}
-                {activeSection === "settings" && <SettingsView />}
+                {activeSection === "store" && (
+                  <EngineCatalog
+                    storageCleanupBanner={<UnusedEngineCleanupBanner />}
+                  />
+                )}
+                {activeSection === "settings" && (
+                  <SettingsView extraPanels={<StorageAndUpdatesPanels />} />
+                )}
               </div>
             )}
           </main>

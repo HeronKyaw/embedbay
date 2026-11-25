@@ -1,8 +1,13 @@
 pub mod chroma;
+pub mod elasticsearch;
 pub mod embeddings;
 pub mod lancedb;
+pub mod milvus;
 pub mod pgvector;
+pub mod pinecone;
 pub mod qdrant;
+pub mod redis_stack;
+pub mod weaviate;
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -325,6 +330,29 @@ fn build_remote_adapter(
         "pgvector" => Ok(Box::new(pgvector::PgVectorAdapter::from_remote(
             &endpoint_url,
             secret.as_deref(),
+        )?)),
+        "pinecone" => Ok(Box::new(pinecone::PineconeAdapter::new(
+            endpoint_url,
+            secret,
+            extra,
+        )?)),
+        "weaviate" => Ok(Box::new(weaviate::WeaviateAdapter::new(
+            endpoint_url,
+            secret,
+        )?)),
+        "milvus" => Ok(Box::new(milvus::MilvusAdapter::new(
+            endpoint_url,
+            secret,
+            extra,
+        )?)),
+        "elasticsearch" => Ok(Box::new(elasticsearch::ElasticsearchAdapter::new(
+            endpoint_url,
+            auth_type,
+            secret,
+        )?)),
+        "redis_stack" | "redis" => Ok(Box::new(redis_stack::RedisStackAdapter::new(
+            endpoint_url,
+            secret,
         )?)),
         other => Err(AdapterError::UnsupportedEngine(other.to_string())),
     }

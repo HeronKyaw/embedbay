@@ -169,3 +169,37 @@ export interface ReorderItem {
   sort_order: number;
   group_id?: string | null;
 }
+
+export interface InstalledEngineStorage {
+  id: string;
+  engine_type: string;
+  version: string;
+  binary_path: string;
+  size_bytes: number;
+  in_use_by: string[];
+}
+
+export interface InstanceStorage {
+  instance_id: string;
+  name: string;
+  engine_type: string;
+  data_dir: string;
+  size_bytes: number;
+}
+
+export interface StorageUsageSummary {
+  data_root: string;
+  total_engine_bytes: number;
+  unused_engine_bytes: number;
+  unused_engine_count: number;
+  total_instance_bytes: number;
+  engines: InstalledEngineStorage[];
+  instances: InstanceStorage[];
+}
+
+export interface CleanupResult {
+  removed_count: number;
+  freed_bytes: number;
+  removed_ids: string[];
+  skipped: string[];
+}

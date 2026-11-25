@@ -1,6 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "@/ipc/system";
-import type { CatalogEngineView, InstalledEngine } from "@/types/runtime";
+import type {
+  CatalogEngineView,
+  CleanupResult,
+  InstalledEngine,
+  StorageUsageSummary,
+} from "@/types/runtime";
 
 const PREVIEW_CATALOG: CatalogEngineView[] = [
   {
@@ -75,4 +80,31 @@ export async function installEngine(
 export async function uninstallEngine(id: string): Promise<void> {
   if (!isTauriRuntime()) return;
   return invoke<void>("uninstall_engine", { id });
+}
+
+export async function getStorageUsage(): Promise<StorageUsageSummary> {
+  if (!isTauriRuntime()) {
+    return {
+      data_root: "",
+      total_engine_bytes: 0,
+      unused_engine_bytes: 0,
+      unused_engine_count: 0,
+      total_instance_bytes: 0,
+      engines: [],
+      instances: [],
+    };
+  }
+  return invoke<StorageUsageSummary>("get_storage_usage");
+}
+
+export async function cleanupUnusedEngines(): Promise<CleanupResult> {
+  if (!isTauriRuntime()) {
+    return {
+      removed_count: 0,
+      freed_bytes: 0,
+      removed_ids: [],
+      skipped: [],
+    };
+  }
+  return invoke<CleanupResult>("cleanup_unused_engines");
 }

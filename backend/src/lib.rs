@@ -52,6 +52,11 @@ pub fn run() {
             Some(vec!["--minimized"]),
         ))
         .setup(move |app| {
+            #[cfg(desktop)]
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())
+                .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+
             let data_dir = app.path().app_local_data_dir()?;
             let db = Arc::new(
                 Database::init(data_dir.clone())
@@ -101,6 +106,8 @@ pub fn run() {
             commands::set_autostart_enabled,
             commands::engines::list_engine_catalog,
             commands::engines::list_installed_engines,
+            commands::engines::get_storage_usage,
+            commands::engines::cleanup_unused_engines,
             commands::engines::install_engine,
             commands::engines::uninstall_engine,
             commands::instances::list_instances,

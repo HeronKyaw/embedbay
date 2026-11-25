@@ -1061,4 +1061,73 @@ mod tests {
             suggest_available_port(&db, "127.0.0.1", next_free).expect("skip db reserved port");
         assert_ne!(next_after_db, next_free);
     }
+
+    #[tokio::test]
+    async fn idle_auto_stop_stops_only_expired_running_instances() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let db = Arc::new(Database::init(dir.path().to_path_buf()).expect("db init"));
+        let logs = Arc::new(InstanceLogStore::default());
+        let pm = ProcessManager::new(Arc::clone(&db), logs);
+
+        let inst_idle = db
+            .create_instance(CreateInstancePayload {
+                name: "Idle Qdrant".to_string(),
+                description: None,
+                color: None,
+                group_id: None,
+                engine_type: "qdrant".to_string(),
+                engine_version: "1.20.2".to_string(),
+                host: Some("127.0.0.1".to_string()),
+                port: 16333,
+                grpc_port: Some(16334),
+                data_dir: None,
+                config_json: None,
+                auto_start: Some(false),
+                idle_timeout_minutes: Some(5),
+                tag_ids: None,
+            })
+            .expect("create idle instance");
+
+        let inst_active = db
+            .create_instance(CreateInstancePayload {
+                name: "Active Qdrant".to_string(),
+                description: None,
+                color: None,
+                group_id: None,
+                engine_type: "qdrant".to_string(),
+                engine_version: "1.20.2".to_string(),
+                host: Some("127.0.0.1".to_string()),
+                port: 16335,
+                grpc_port: Some(16336),
+                data_dir: None,
+                config_json: None,
+                auto_start: Some(false),
+                idle_timeout_minutes: Some(5),
+                tag_ids: None,
+            })
+            .expect("create active instance");
+
+        {
+            let mut guard = pm.runtimes.lock().await;
+            let stale_ts = now_unix_secs() - 600;
+            let mut rt_idle = ManagedRuntime::new(false);
+            rt_idle.status = InstanceStatus::Running;
+            rt_idle.last_activity_at = stale_ts;
+            guard.insert(inst_idle.id.clone(), rt_idle);
+
+            let mut rt_active = ManagedRuntime::new(false);
+            rt_active.status = InstanceStatus::Running;
+            rt_active.last_activity_at = stale_ts;
+            guard.insert(inst_active.id.clone(), rt_active);
+        }
+
+        pm.record_activity(&inst_active.id).await;
+
+        let results = pm.stop_idle_instances(0).await;
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].instance_id, inst_idle.id);
+        assert!(results[0].ok);
+        assert!(!pm.is_instance_running(&inst_idle.id).await);
+        assert!(pm.is_instance_running(&inst_active.id).await);
+    }
 }
