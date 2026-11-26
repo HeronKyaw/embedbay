@@ -3,9 +3,11 @@ import {
   ArrowLeft,
   ArrowRight,
   ChevronDown,
+  Code2,
   Database,
   Globe,
   Layers,
+  Lock,
   Play,
   Plus,
   RefreshCw,
@@ -23,8 +25,10 @@ import {
 } from "@/components/explorer/CrudModal";
 import { ExplorerFloatingSwitcher } from "@/components/explorer/ExplorerFloatingSwitcher";
 import { ExplorerHome } from "@/components/explorer/ExplorerHome";
+import { IndexManagerModal } from "@/components/explorer/IndexManagerModal";
 import { MetadataDrawer } from "@/components/explorer/MetadataDrawer";
 import { RecordTable } from "@/components/explorer/RecordTable";
+import { SnippetModal } from "@/components/explorer/SnippetModal";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { WorkspaceTabs } from "@/components/layout/WorkspaceTabs";
 import { LogViewer } from "@/components/manager/LogViewer";
@@ -44,6 +48,7 @@ import {
 } from "@/ipc/explorer";
 import { startInstance, stopInstance } from "@/ipc/instances";
 import { formatRamMb } from "@/lib/format";
+import { generateConnectionSnippets } from "@/lib/snippets";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/useAppStore";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
@@ -86,14 +91,25 @@ function pushBackGuard(): void {
 
 function CollectionTabPane({
   tab,
+  engineType,
+  readOnly = false,
   onCollectionDeleted,
   renderVisualizerButton,
   onOpenImportExport,
+  onOpenMigrate,
 }: {
   tab: WorkspaceTab;
+  engineType: string;
+  readOnly?: boolean;
   onCollectionDeleted: () => void;
   renderVisualizerButton?: boolean;
   onOpenImportExport?: (
+    target: ConnectionTarget,
+    collection: string,
+    schema: CollectionSchema | null,
+    readOnly: boolean,
+  ) => void;
+  onOpenMigrate?: (
     target: ConnectionTarget,
     collection: string,
     schema: CollectionSchema | null,
@@ -112,6 +128,11 @@ function CollectionTabPane({
   );
   const [upsertOpen, setUpsertOpen] = React.useState(false);
   const [confirmDeleteCol, setConfirmDeleteCol] = React.useState(false);
+  const [indexesOpen, setIndexesOpen] = React.useState(false);
+
+  const supportsIndexes =
+    engineType.toLowerCase() === "qdrant" ||
+    engineType.toLowerCase() === "pgvector";
 
   const loadData = React.useCallback(async () => {
     if (!tab.target || !tab.collection) return;
@@ -196,6 +217,7 @@ function CollectionTabPane({
           schema={schema}
           collectionName={tab.collection ?? ""}
           loading={loading}
+          readOnly={readOnly}
           onRefresh={() => void loadData()}
           onUpsertRecord={() => setUpsertOpen(true)}
           onOpenSearch={() => {
@@ -223,8 +245,16 @@ function CollectionTabPane({
           onOpenImportExport={
             onOpenImportExport && tab.target && tab.collection
               ? () =>
-                  onOpenImportExport(tab.target!, tab.collection!, schema)
+                  onOpenImportExport(tab.target!, tab.collection!, schema, readOnly)
               : undefined
+          }
+          onOpenMigrate={
+            onOpenMigrate && tab.target && tab.collection
+              ? () => onOpenMigrate(tab.target!, tab.collection!, schema)
+              : undefined
+          }
+          onOpenIndexes={
+            supportsIndexes ? () => setIndexesOpen(true) : undefined
           }
           onDeleteCollection={() => setConfirmDeleteCol(true)}
         />
@@ -246,6 +276,7 @@ function CollectionTabPane({
         <RecordTable
           records={records}
           loading={loading}
+          readOnly={readOnly}
           selectedId={tab.selectedRecord?.id ?? null}
           totalCount={totalCount}
           pageInfo={`Offset ${tab.offset}`}
@@ -286,6 +317,7 @@ function CollectionTabPane({
       {tab.drawerOpen && (
         <MetadataDrawer
           record={tab.selectedRecord}
+          readOnly={readOnly}
           positionLabel={
             selectedIndex >= 0
               ? `${selectedIndex + 1} / ${records.length}`
@@ -338,6 +370,17 @@ function CollectionTabPane({
         onUpserted={() => void loadData()}
       />
 
+      <IndexManagerModal
+        open={indexesOpen}
+        onOpenChange={setIndexesOpen}
+        target={tab.target ?? null}
+        collection={tab.collection ?? null}
+        engineType={engineType}
+        schema={schema}
+        readOnly={readOnly}
+        onChanged={() => void loadData()}
+      />
+
       <Dialog
         open={confirmDeleteCol}
         onOpenChange={setConfirmDeleteCol}
@@ -386,11 +429,18 @@ export function ExplorerWorkspace({
   renderVisualizerTab,
   renderVisualizerButton = false,
   onOpenImportExport,
+  onOpenMigrate,
   onExportSearchResults,
 }: {
   renderVisualizerTab?: (tab: WorkspaceTab) => React.ReactNode;
   renderVisualizerButton?: boolean;
   onOpenImportExport?: (
+    target: ConnectionTarget,
+    collection: string,
+    schema: CollectionSchema | null,
+    readOnly: boolean,
+  ) => void;
+  onOpenMigrate?: (
     target: ConnectionTarget,
     collection: string,
     schema: CollectionSchema | null,
@@ -429,6 +479,7 @@ export function ExplorerWorkspace({
   const [deletingCol, setDeletingCol] = React.useState(false);
   const [connBusy, setConnBusy] = React.useState(false);
   const [connectingKey, setConnectingKey] = React.useState<string | null>(null);
+  const [snippetModalOpen, setSnippetModalOpen] = React.useState(false);
   const switcherBtnRef = React.useRef<HTMLButtonElement | null>(null);
   const probeSeqRef = React.useRef(0);
   const mountedRef = React.useRef(true);
@@ -457,6 +508,11 @@ export function ExplorerWorkspace({
         name: inst.name,
         engineType: inst.engine_type,
         engineVersion: inst.engine_version,
+        host: inst.host,
+        port: inst.port,
+        dataDir: inst.data_dir,
+        hasAuth: false,
+        readOnly: false,
         endpoint: isEmbedded ? null : `${inst.host}:${inst.port}`,
         description: inst.description ?? null,
         ramBytes: m?.ram_bytes ?? null,
@@ -481,6 +537,11 @@ export function ExplorerWorkspace({
         name: conn.name,
         engineType: conn.engine_type,
         engineVersion: null as string | null,
+        host: undefined as string | undefined,
+        port: undefined as number | undefined,
+        dataDir: undefined as string | undefined,
+        hasAuth: conn.auth_type !== "none",
+        readOnly: Boolean(conn.read_only),
         endpoint: conn.endpoint_url,
         description: conn.description ?? null,
         ramBytes: null as number | null,
@@ -634,6 +695,72 @@ export function ExplorerWorkspace({
         t.id === activeTabId &&
         (!resolvedConnection || t.connectionKey === resolvedConnection.key),
     ) ?? null;
+
+  const isTargetReadOnly = React.useCallback(
+    (target?: ConnectionTarget) => {
+      if (!target || target.kind !== "remote_connection") return false;
+      return Boolean(
+        remoteConnections.find((r) => r.id === target.connection_id)?.read_only,
+      );
+    },
+    [remoteConnections],
+  );
+
+  const activeTabReadOnly = isTargetReadOnly(activeTab?.target);
+
+  const resolveTargetEngineType = React.useCallback(
+    (target?: ConnectionTarget) => {
+      if (!target) return "";
+      if (target.kind === "local_instance") {
+        return (
+          instances.find((i) => i.id === target.instance_id)?.engine_type ?? ""
+        );
+      }
+      if (target.kind === "remote_connection") {
+        return (
+          remoteConnections.find((r) => r.id === target.connection_id)
+            ?.engine_type ?? ""
+        );
+      }
+      return target.engine_type;
+    },
+    [instances, remoteConnections],
+  );
+  const activeTabEngineType = resolveTargetEngineType(activeTab?.target);
+
+  const snippetName = resolvedConnection?.name ?? "";
+  const snippetEngine = resolvedConnection?.engineType ?? "";
+  const snippetHost = resolvedConnection?.host;
+  const snippetPort = resolvedConnection?.port;
+  const snippetEndpoint =
+    resolvedConnection?.kind === "remote"
+      ? (resolvedConnection.endpoint ?? undefined)
+      : undefined;
+  const snippetDataDir = resolvedConnection?.dataDir;
+  const snippetHasAuth = resolvedConnection?.hasAuth ?? false;
+  const hasResolvedConnection = Boolean(resolvedConnection);
+
+  const connectionSnippets = React.useMemo(() => {
+    if (!hasResolvedConnection) return [];
+    return generateConnectionSnippets({
+      name: snippetName,
+      engineType: snippetEngine,
+      host: snippetHost,
+      port: snippetPort,
+      endpointUrl: snippetEndpoint,
+      dataDir: snippetDataDir,
+      hasAuth: snippetHasAuth,
+    });
+  }, [
+    hasResolvedConnection,
+    snippetName,
+    snippetEngine,
+    snippetHost,
+    snippetPort,
+    snippetEndpoint,
+    snippetDataDir,
+    snippetHasAuth,
+  ]);
 
   const canGoBack = Boolean(resolvedConnection || activeTab);
 
@@ -917,6 +1044,12 @@ export function ExplorerWorkspace({
                     kind={resolvedConnection.kind}
                     status={resolvedConnection.status}
                   />
+                  {resolvedConnection.readOnly && (
+                    <Badge variant="warning" className="h-5 text-[10px]">
+                      <Lock className="h-2.5 w-2.5" />
+                      Read-Only
+                    </Badge>
+                  )}
                   {resolvedConnection.ready && (
                     <span className="inline-flex h-5 items-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 font-mono text-[11px] leading-none text-[var(--text-secondary)]">
                       {collections.length}
@@ -995,6 +1128,16 @@ export function ExplorerWorkspace({
                     <>
                       <Button
                         type="button"
+                        variant="outline"
+                        size="sm"
+                        title="Copy connection snippet"
+                        onClick={() => setSnippetModalOpen(true)}
+                      >
+                        <Code2 className="h-3.5 w-3.5" />
+                        Code
+                      </Button>
+                      <Button
+                        type="button"
                         variant="ghost"
                         size="icon"
                         title="Refresh Collections"
@@ -1015,6 +1158,12 @@ export function ExplorerWorkspace({
                       <Button
                         type="button"
                         size="sm"
+                        disabled={resolvedConnection.readOnly}
+                        title={
+                          resolvedConnection.readOnly
+                            ? "Disabled in Read-Only mode"
+                            : "New Collection"
+                        }
                         onClick={() => setCreateColOpen(true)}
                       >
                         <Plus className="h-3.5 w-3.5" />
@@ -1049,8 +1198,11 @@ export function ExplorerWorkspace({
                   <CollectionTabPane
                     key={activeTab.id}
                     tab={activeTab}
+                    engineType={activeTabEngineType}
+                    readOnly={activeTabReadOnly}
                     renderVisualizerButton={renderVisualizerButton}
                     onOpenImportExport={onOpenImportExport}
+                    onOpenMigrate={onOpenMigrate}
                     onCollectionDeleted={() => {
                       const deletedTarget = activeTab.target;
                       const deletedConnKey = activeTab.connectionKey;
@@ -1067,6 +1219,7 @@ export function ExplorerWorkspace({
                   <SearchPlayground
                     key={activeTab.id}
                     tab={activeTab}
+                    readOnly={activeTabReadOnly}
                     onExportSearchResults={onExportSearchResults}
                   />
                 ) : activeTab.kind === "visualizer" && renderVisualizerTab ? (
@@ -1184,6 +1337,12 @@ export function ExplorerWorkspace({
                         type="button"
                         size="sm"
                         className="mt-4"
+                        disabled={resolvedConnection.readOnly}
+                        title={
+                          resolvedConnection.readOnly
+                            ? "Disabled in Read-Only mode"
+                            : "Create Collection"
+                        }
                         onClick={() => setCreateColOpen(true)}
                       >
                         <Plus className="h-3.5 w-3.5" />
@@ -1305,11 +1464,18 @@ export function ExplorerWorkspace({
                             type="button"
                             variant="ghost"
                             size="icon"
-                            title={`Delete ${col.name}`}
+                            disabled={resolvedConnection.readOnly}
+                            title={
+                              resolvedConnection.readOnly
+                                ? "Disabled in Read-Only mode"
+                                : `Delete ${col.name}`
+                            }
                             aria-label={`Delete collection ${col.name}`}
                             onClick={(e) => {
                               e.stopPropagation();
-                              setDeleteColName(col.name);
+                              if (!resolvedConnection.readOnly) {
+                                setDeleteColName(col.name);
+                              }
                             }}
                           >
                             <Trash2 className="h-3.5 w-3.5 text-[var(--status-error)]" />
@@ -1333,6 +1499,7 @@ export function ExplorerWorkspace({
         connectionName={resolvedConnection?.name ?? null}
         target={resolvedConnection?.target ?? null}
         ready={resolvedConnection?.ready ?? false}
+        readOnly={resolvedConnection?.readOnly ?? false}
         connectingKey={connectingKey}
         onSwitchConnection={handleOpenConnection}
         onCreateCollection={() => setCreateColOpen(true)}
@@ -1393,6 +1560,12 @@ export function ExplorerWorkspace({
           </Button>
         </div>
       </Dialog>
+      <SnippetModal
+        open={snippetModalOpen}
+        onOpenChange={setSnippetModalOpen}
+        title={`Connect to ${resolvedConnection?.name ?? "Database"}`}
+        snippets={connectionSnippets}
+      />
     </div>
   );
 }

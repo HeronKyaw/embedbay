@@ -21,6 +21,7 @@ export interface RemoteConnection {
   auth_type: string;
   secret_ref: string | null;
   extra_json: string;
+  read_only: boolean;
   sort_order: number;
   created_at: number;
   tag_ids: string[];
@@ -36,6 +37,7 @@ export interface CreateRemoteConnectionPayload {
   auth_type: string;
   secret?: string | null;
   extra_json?: string;
+  read_only?: boolean;
   tag_ids?: string[];
 }
 
@@ -49,6 +51,7 @@ export interface UpdateRemoteConnectionPayload {
   auth_type?: string;
   secret?: string | null;
   extra_json?: string;
+  read_only?: boolean;
   sort_order?: number;
   tag_ids?: string[];
 }
@@ -56,7 +59,14 @@ export interface UpdateRemoteConnectionPayload {
 export interface EmbeddingProfile {
   id: string;
   name: string;
-  provider: "ollama" | "openai_compatible" | string;
+  provider:
+    | "ollama"
+    | "openai_compatible"
+    | "gemini"
+    | "cohere"
+    | "voyage"
+    | "huggingface_tei"
+    | string;
   model_name: string;
   base_url: string | null;
   dimensions: number | null;
@@ -184,4 +194,76 @@ export interface SearchRequest {
 export interface SearchResponse {
   records: VectorRecord[];
   latency_ms: number;
+}
+
+export interface SearchHistoryItem {
+  id: string;
+  connection_key: string;
+  collection: string;
+  search_mode: "text" | "vector" | string;
+  query_text: string | null;
+  vector_json: string | null;
+  embedding_profile_id: string | null;
+  top_k: number;
+  score_threshold: number | null;
+  filter_json: string | null;
+  result_count: number;
+  latency_ms: number | null;
+  created_at: number;
+}
+
+export interface SaveSearchHistoryPayload {
+  connection_key: string;
+  collection: string;
+  search_mode: "text" | "vector";
+  query_text?: string | null;
+  vector_json?: string | null;
+  embedding_profile_id?: string | null;
+  top_k: number;
+  score_threshold?: number | null;
+  filter_json?: string | null;
+  result_count: number;
+  latency_ms?: number | null;
+}
+
+export interface SearchPreset {
+  id: string;
+  name: string;
+  connection_key: string;
+  collection: string;
+  search_mode: "text" | "vector" | string;
+  query_text: string | null;
+  vector_json: string | null;
+  embedding_profile_id: string | null;
+  top_k: number;
+  score_threshold: number | null;
+  filter_json: string | null;
+  created_at: number;
+}
+
+export interface SaveSearchPresetPayload {
+  name: string;
+  connection_key: string;
+  collection: string;
+  search_mode: "text" | "vector";
+  query_text?: string | null;
+  vector_json?: string | null;
+  embedding_profile_id?: string | null;
+  top_k: number;
+  score_threshold?: number | null;
+  filter_json?: string | null;
+}
+
+export interface CollectionIndexInfo {
+  name: string;
+  field_name: string;
+  index_type: string;
+  params: Record<string, unknown>;
+  status: string | null;
+}
+
+export interface CreateIndexRequest {
+  field_name: string;
+  index_type: string;
+  params?: Record<string, unknown>;
 }

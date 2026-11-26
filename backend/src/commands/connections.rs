@@ -228,7 +228,7 @@ pub async fn test_embedding_profile_draft(
         return Err("Model name is required".to_string());
     }
 
-    let api_key = if payload.provider == "openai_compatible" {
+    let api_key = if payload.provider != "ollama" {
         if let Some(key) = payload
             .api_key
             .as_deref()
@@ -313,6 +313,7 @@ mod tests {
                 auth_type: "api_key".to_string(),
                 secret: Some("super-secret-token-123".to_string()),
                 extra_json: None,
+                read_only: None,
                 tag_ids: None,
             },
         )

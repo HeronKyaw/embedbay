@@ -1,5 +1,5 @@
 import * as React from "react";
-import { CheckCircle2, Globe, Loader2, ShieldAlert } from "lucide-react";
+import { CheckCircle2, Globe, Loader2, Lock, ShieldAlert } from "lucide-react";
 import { TagPicker } from "@/components/sidebar/TagPicker";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -19,10 +19,14 @@ const REMOTE_ENGINES = [
   { id: "qdrant", label: "Qdrant", hint: "https://your-cluster.qdrant.io:6333" },
   { id: "chroma", label: "Chroma", hint: "http://127.0.0.1:8000" },
   { id: "pgvector", label: "PostgreSQL + pgvector", hint: "postgresql://user@host:5432/dbname?sslmode=require" },
+  { id: "meilisearch", label: "Meilisearch", hint: "http://127.0.0.1:7700" },
+  { id: "surrealdb", label: "SurrealDB", hint: "http://127.0.0.1:8008" },
+  { id: "elasticsearch", label: "Elasticsearch", hint: "https://localhost:9200" },
+  { id: "opensearch", label: "OpenSearch", hint: "https://localhost:9201" },
+  { id: "mariadb", label: "MariaDB 11.8 Vector", hint: "mysql://user@host:3306/dbname" },
   { id: "pinecone", label: "Pinecone", hint: "https://your-index-project.svc.pinecone.io" },
   { id: "weaviate", label: "Weaviate", hint: "https://your-cluster.weaviate.network" },
   { id: "milvus", label: "Milvus / Zilliz", hint: "https://in01-xxxx.serverless.gcp-us-west1.cloud.zilliz.com" },
-  { id: "elasticsearch", label: "Elasticsearch", hint: "https://localhost:9200" },
   { id: "redis_stack", label: "Redis Stack", hint: "redis://127.0.0.1:6379" },
 ] as const;
 
@@ -45,6 +49,7 @@ export function RemoteConnectionModal() {
   const [authType, setAuthType] = React.useState("api_key");
   const [secret, setSecret] = React.useState("");
   const [extraJson, setExtraJson] = React.useState("{}");
+  const [readOnly, setReadOnly] = React.useState(false);
   const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
   const [testResult, setTestResult] = React.useState<string | null>(null);
   const [testing, setTesting] = React.useState(false);
@@ -63,6 +68,7 @@ export function RemoteConnectionModal() {
       setAuthType(editing.auth_type);
       setSecret("");
       setExtraJson(editing.extra_json || "{}");
+      setReadOnly(Boolean(editing.read_only));
       setSelectedTags(editing.tag_ids);
     } else {
       setName("");
@@ -74,6 +80,7 @@ export function RemoteConnectionModal() {
       setAuthType("api_key");
       setSecret("");
       setExtraJson("{}");
+      setReadOnly(false);
       setSelectedTags([]);
     }
   }, [open, editing]);
@@ -142,6 +149,7 @@ export function RemoteConnectionModal() {
                 ? secret.trim()
                 : undefined,
           extra_json: extraJson.trim() || "{}",
+          read_only: readOnly,
           tag_ids: selectedTags,
         });
         clearConnectionError(`remote:${editing.id}`);
@@ -157,6 +165,7 @@ export function RemoteConnectionModal() {
           auth_type: authType,
           secret: authType === "none" ? null : secret.trim() || null,
           extra_json: extraJson.trim() || "{}",
+          read_only: readOnly,
           tag_ids: selectedTags,
         });
         toast.success(
@@ -182,7 +191,7 @@ export function RemoteConnectionModal() {
       onOpenChange={(next) => {
         if (!next) closeModal();
       }}
-      title={editing ? `Edit Remote: ${editing.name}` : "Add Remote Connection"}
+      title={editing ? `Edit Connection: ${editing.name}` : "Add Connection"}
       description="Connect to cloud or self-hosted vector databases. Secrets are stored in the OS keyring, never plaintext SQLite."
       maxWidthClass="w-[560px]"
     >
@@ -345,6 +354,33 @@ export function RemoteConnectionModal() {
             onChange={(e) => setExtraJson(e.target.value)}
             className="h-8 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2.5 font-mono text-[11px] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
           />
+        </div>
+
+        <div
+          className={cn(
+            "rounded-lg border p-3 transition-colors",
+            readOnly
+              ? "border-[var(--status-starting)]/40 bg-[var(--status-starting)]/10"
+              : "border-[var(--border-subtle)] bg-[var(--bg-surface)]",
+          )}
+        >
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={readOnly}
+              onChange={(e) => setReadOnly(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--status-starting)]"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)]">
+                <Lock className="h-3.5 w-3.5 text-[var(--status-starting)]" />
+                Read-Only Mode (Production Safety)
+              </div>
+              <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">
+                Blocks creating or deleting collections, upserting/deleting records, importing documents, and altering indexes. Recommended for production clusters.
+              </p>
+            </div>
+          </label>
         </div>
 
         <TagPicker

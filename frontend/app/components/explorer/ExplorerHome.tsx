@@ -1,6 +1,7 @@
 import * as React from "react";
 import {
   ArrowRight,
+  Boxes,
   ChevronDown,
   ChevronRight,
   Database,
@@ -8,6 +9,7 @@ import {
   Globe,
   Inbox,
   Loader2,
+  Lock,
   Pencil,
   Play,
   Plus,
@@ -35,6 +37,7 @@ import {
 } from "@/ipc/instances";
 import { formatBytes, formatRamMb } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useAppStore } from "@/stores/useAppStore";
 import {
   type SidebarStatusFilter,
   useRuntimeStore,
@@ -345,6 +348,12 @@ function RemoteConnectionCard({
                 {conn.name}
               </h3>
               <Badge variant="accent">Remote</Badge>
+              {conn.read_only && (
+                <Badge variant="warning" className="text-[10px]">
+                  <Lock className="h-2.5 w-2.5" />
+                  Read-Only
+                </Badge>
+              )}
             </div>
             <div className="mt-1.5 flex flex-wrap items-baseline gap-1.5 font-mono text-[11px] leading-none text-[var(--text-secondary)]">
               <span className="uppercase text-[var(--accent-secondary)]">
@@ -458,10 +467,8 @@ export function ExplorerHome({
   const clearTagFilters = useRuntimeStore((s) => s.clearTagFilters);
   const statusFilter = useRuntimeStore((s) => s.statusFilter);
   const setStatusFilter = useRuntimeStore((s) => s.setStatusFilter);
-  const openCreateInstanceModal = useRuntimeStore(
-    (s) => s.openCreateInstanceModal,
-  );
   const refreshGroupsAndTags = useRuntimeStore((s) => s.refreshGroupsAndTags);
+  const setActiveSection = useAppStore((s) => s.setActiveSection);
 
   const remoteConnections = useTabsStore((s) => s.remoteConnections);
   const openRemoteModal = useTabsStore((s) => s.openRemoteModal);
@@ -610,20 +617,11 @@ export function ExplorerHome({
               </Button>
               <Button
                 type="button"
-                variant="secondary"
                 size="sm"
                 onClick={() => openRemoteModal()}
               >
-                <Globe className="h-3.5 w-3.5 text-[var(--accent-secondary)]" />
-                Remote
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => openCreateInstanceModal()}
-              >
                 <Plus className="h-3.5 w-3.5" />
-                New Instance
+                Add Connection
               </Button>
             </>
           }
@@ -898,28 +896,46 @@ export function ExplorerHome({
               <Database className="h-5 w-5" />
             </div>
             <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-              No Matching Connections
+              {totalCount === 0 ? "No Connections Yet" : "No Matching Connections"}
             </h2>
             <p className="mt-1 max-w-md text-xs text-[var(--text-secondary)]">
-              Create a local vector database instance, add a remote connection, or adjust your active filters.
+              {totalCount === 0
+                ? "Add a vector database connection here, or create a managed instance in Local Runtimes."
+                : "No connections match your active search, status, or tag filters."}
             </p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {totalCount === 0 ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setActiveSection("runtimes")}
+                >
+                  <Boxes className="h-3.5 w-3.5" />
+                  Local Runtimes
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setSearchFilter("");
+                    setStatusFilter("all");
+                    clearTagFilters();
+                  }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Clear Filters
+                </Button>
+              )}
               <Button
                 type="button"
-                variant="secondary"
                 size="sm"
                 onClick={() => openRemoteModal()}
               >
-                <Globe className="h-3.5 w-3.5 text-[var(--accent-secondary)]" />
-                Add Remote Connection
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => openCreateInstanceModal()}
-              >
                 <Plus className="h-3.5 w-3.5" />
-                Create Local Instance
+                Add Connection
               </Button>
             </div>
           </div>

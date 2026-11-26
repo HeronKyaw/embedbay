@@ -8,8 +8,13 @@ use tauri::State;
 use uuid::Uuid;
 
 use crate::adapters::embeddings;
-use crate::adapters::{resolve_adapter, BrowseRecordsRequest, ConnectionTarget, FilterSpec, VectorRecord};
+use crate::adapters::{
+    assert_writable, resolve_adapter, BrowseRecordsRequest, ConnectionTarget,
+    CreateCollectionRequest, FilterSpec, VectorRecord,
+};
+use crate::db::Database;
 use crate::platform::secrets;
+use crate::supervisor::process_manager::ProcessManager;
 use crate::supervisor::EventSink;
 use crate::AppState;
 
@@ -47,6 +52,35 @@ pub struct TransferProgressEvent {
     pub processed: usize,
     pub total: usize,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MigrateCollectionRequest {
+    pub source_target: ConnectionTarget,
+    pub source_collection: String,
+    pub dest_target: ConnectionTarget,
+    pub dest_collection: String,
+    #[serde(default = "default_true")]
+    pub create_dest_if_missing: bool,
+    pub dest_dimensions: Option<usize>,
+    pub dest_distance_metric: Option<String>,
+    pub filter: Option<FilterSpec>,
+    pub reembed_profile_id: Option<String>,
+    pub reembed_text_field: Option<String>,
+    pub batch_size: Option<usize>,
+    pub max_records: Option<usize>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MigrationResult {
+    pub migrated: usize,
+    pub skipped: usize,
+    pub failed: usize,
+    pub errors: Vec<String>,
 }
 
 fn emit_transfer_progress(sink: Option<&dyn EventSink>, evt: TransferProgressEvent) {
@@ -287,6 +321,8 @@ pub async fn import_records(
     format: TransferFormat,
     options: ImportOptions,
 ) -> Result<ImportResult, String> {
+    assert_writable(&state.db, &target)?;
+
     let adapter = resolve_adapter(&state.db, &state.process_manager, &target)
         .await
         .map_err(|e| e.to_string())?;
@@ -425,6 +461,309 @@ pub async fn export_records(
     })
 }
 
+pub fn extract_record_text(rec: &VectorRecord, text_field: Option<&str>) -> Option<String> {
+    if let Some(field) = text_field.map(str::trim).filter(|s| !s.is_empty()) {
+        if field == "document" {
+            if let Some(doc) = rec.document.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                return Some(doc.to_string());
+            }
+        }
+        if let Some(val) = rec.payload.get(field) {
+            let txt = match val {
+                Value::String(s) => s.trim().to_string(),
+                Value::Number(n) => n.to_string(),
+                Value::Bool(b) => b.to_string(),
+                _ => String::new(),
+            };
+            if !txt.is_empty() {
+                return Some(txt);
+            }
+        }
+        return None;
+    }
+
+    rec.document
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| {
+            rec.payload
+                .get("document")
+                .or_else(|| rec.payload.get("text"))
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(ToString::to_string)
+        })
+}
+
+pub async fn migrate_collection_impl(
+    db: &Database,
+    pm: &ProcessManager,
+    sink: Option<&dyn EventSink>,
+    req: MigrateCollectionRequest,
+) -> Result<MigrationResult, String> {
+    assert_writable(db, &req.dest_target)?;
+
+    let dest_col = req.dest_collection.trim().to_string();
+    if dest_col.is_empty() {
+        return Err("Destination collection name cannot be empty".to_string());
+    }
+    let source_col = req.source_collection.trim().to_string();
+    if source_col.is_empty() {
+        return Err("Source collection name cannot be empty".to_string());
+    }
+
+    let source_adapter = resolve_adapter(db, pm, &req.source_target)
+        .await
+        .map_err(|e| e.to_string())?;
+    let dest_adapter = resolve_adapter(db, pm, &req.dest_target)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let reembed = match req
+        .reembed_profile_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(pid) => {
+            let profile = db
+                .get_embedding_profile(pid)
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("Embedding profile '{}' not found", pid))?;
+            let api_key = match &profile.secret_ref {
+                Some(ref_key) => secrets::get_secret(ref_key)?,
+                None => None,
+            };
+            Some((profile, api_key))
+        }
+        None => None,
+    };
+
+    let source_info = source_adapter.get_collection_info(&source_col).await.ok();
+    let mut dest_exists = dest_adapter.get_collection_info(&dest_col).await.is_ok();
+    let estimated_total = source_info.as_ref().map(|i| i.vector_count as usize).unwrap_or(0);
+
+    let batch_size = req.batch_size.unwrap_or(100).clamp(10, 500);
+    let max_records = req.max_records.unwrap_or(50_000).clamp(1, 500_000);
+    let total_budget = if estimated_total > 0 {
+        estimated_total.min(max_records)
+    } else {
+        max_records
+    };
+
+    let mut migrated = 0usize;
+    let mut skipped = 0usize;
+    let mut failed = 0usize;
+    let mut errors = Vec::new();
+    let mut processed = 0usize;
+    let mut cursor: Option<String> = None;
+    let mut offset = 0usize;
+
+    while processed < max_records {
+        let fetch_limit = (max_records - processed).min(batch_size);
+        let page = source_adapter
+            .browse_records(
+                &source_col,
+                BrowseRecordsRequest {
+                    limit: fetch_limit,
+                    offset,
+                    cursor: cursor.clone(),
+                    include_vectors: reembed.is_none(),
+                    filter: req.filter.clone(),
+                },
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if page.records.is_empty() {
+            break;
+        }
+
+        let fetched = page.records.len();
+        processed += fetched;
+        offset += fetched;
+        cursor = page.next_cursor.clone();
+
+        let mut records_to_upsert = Vec::new();
+
+        if let Some((ref profile, ref api_key)) = reembed {
+            let mut valid_records = Vec::new();
+            let mut texts = Vec::new();
+            for rec in page.records {
+                if let Some(txt) = extract_record_text(&rec, req.reembed_text_field.as_deref()) {
+                    texts.push(txt);
+                    valid_records.push(rec);
+                } else {
+                    skipped += 1;
+                }
+            }
+
+            for chunk_start in (0..valid_records.len()).step_by(32) {
+                let chunk_end = (chunk_start + 32).min(valid_records.len());
+                let slice_texts = &texts[chunk_start..chunk_end];
+                match embeddings::embed_texts(profile, api_key.as_deref(), slice_texts).await {
+                    Ok((vecs, _)) => {
+                        for (idx, mut rec) in
+                            valid_records[chunk_start..chunk_end].iter().cloned().enumerate()
+                        {
+                            if let Some(v) = vecs.get(idx).filter(|v| !v.is_empty()) {
+                                rec.vector = Some(v.clone());
+                                records_to_upsert.push(rec);
+                            } else {
+                                failed += 1;
+                                errors.push(format!("Record '{}': empty embedding returned", rec.id));
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        let count = chunk_end - chunk_start;
+                        failed += count;
+                        errors.push(format!("Embedding batch failed: {}", err));
+                    }
+                }
+            }
+        } else {
+            for rec in page.records {
+                if rec.vector.as_ref().map(|v| !v.is_empty()).unwrap_or(false) {
+                    records_to_upsert.push(rec);
+                } else {
+                    skipped += 1;
+                }
+            }
+        }
+
+        if !records_to_upsert.is_empty() {
+            if !dest_exists && req.create_dest_if_missing {
+                let dims = req
+                    .dest_dimensions
+                    .filter(|&d| d > 0)
+                    .or_else(|| {
+                        records_to_upsert
+                            .iter()
+                            .find_map(|r| r.vector.as_ref().map(|v| v.len()))
+                    })
+                    .or_else(|| {
+                        reembed
+                            .as_ref()
+                            .and_then(|(p, _)| p.dimensions.map(|d| d as usize))
+                    })
+                    .or_else(|| source_info.as_ref().and_then(|s| s.dimensions))
+                    .unwrap_or(384);
+                let metric = req
+                    .dest_distance_metric
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(ToString::to_string)
+                    .or_else(|| {
+                        source_info
+                            .as_ref()
+                            .and_then(|s| s.distance_metric.clone())
+                    })
+                    .unwrap_or_else(|| "cosine".to_string());
+
+                dest_adapter
+                    .create_collection(CreateCollectionRequest {
+                        name: dest_col.clone(),
+                        dimensions: dims,
+                        distance_metric: metric,
+                        index_type: None,
+                    })
+                    .await
+                    .map_err(|e| e.to_string())?;
+                dest_exists = true;
+            }
+
+            match dest_adapter
+                .upsert_records(&dest_col, records_to_upsert.clone())
+                .await
+            {
+                Ok(n) => migrated += n,
+                Err(err) => {
+                    failed += records_to_upsert.len();
+                    errors.push(err.to_string());
+                }
+            }
+        }
+
+        emit_transfer_progress(
+            sink,
+            TransferProgressEvent {
+                kind: "migrate".to_string(),
+                processed: processed.min(total_budget),
+                total: total_budget,
+                message: format!(
+                    "Migrated {} record(s){}...",
+                    migrated,
+                    if reembed.is_some() { " (re-embedded)" } else { "" }
+                ),
+            },
+        );
+
+        if cursor.is_none() && fetched < fetch_limit {
+            break;
+        }
+    }
+
+    if !dest_exists && req.create_dest_if_missing && migrated == 0 && skipped == 0 && failed == 0 {
+        let dims = req
+            .dest_dimensions
+            .filter(|&d| d > 0)
+            .or_else(|| {
+                reembed
+                    .as_ref()
+                    .and_then(|(p, _)| p.dimensions.map(|d| d as usize))
+            })
+            .or_else(|| source_info.as_ref().and_then(|s| s.dimensions))
+            .unwrap_or(384);
+        let metric = req
+            .dest_distance_metric
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(ToString::to_string)
+            .or_else(|| {
+                source_info
+                    .as_ref()
+                    .and_then(|s| s.distance_metric.clone())
+            })
+            .unwrap_or_else(|| "cosine".to_string());
+        dest_adapter
+            .create_collection(CreateCollectionRequest {
+                name: dest_col,
+                dimensions: dims,
+                distance_metric: metric,
+                index_type: None,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(MigrationResult {
+        migrated,
+        skipped,
+        failed,
+        errors,
+    })
+}
+
+#[tauri::command]
+pub async fn migrate_collection(
+    state: State<'_, AppState>,
+    request: MigrateCollectionRequest,
+) -> Result<MigrationResult, String> {
+    migrate_collection_impl(
+        &state.db,
+        &state.process_manager,
+        Some(state.event_sink.as_ref()),
+        request,
+    )
+    .await
+}
+
 #[tauri::command]
 pub fn export_search_results(
     records: Vec<VectorRecord>,
@@ -503,5 +842,280 @@ mod tests {
         assert_eq!(parsed_c.len(), 2);
         assert_eq!(parsed_c[0].id, "r1");
         assert_eq!(parsed_c[0].vector.as_ref().expect("vec").len(), 3);
+    }
+
+    #[tokio::test]
+    async fn migrate_collection_copies_and_reembeds_between_local_lancedb_instances() {
+        use std::sync::Arc;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        use crate::adapters::lancedb::LanceDbAdapter;
+        use crate::adapters::VectorDbAdapter;
+        use crate::commands::connections::{
+            create_embedding_profile_impl, create_remote_connection_impl,
+        };
+        use crate::db::models::{
+            CreateEmbeddingProfilePayload, CreateInstancePayload, CreateRemoteConnectionPayload,
+        };
+        use crate::supervisor::logs::InstanceLogStore;
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let db = Arc::new(Database::init(dir.path().to_path_buf()).expect("db init"));
+        let logs = Arc::new(InstanceLogStore::default());
+        let pm = ProcessManager::new(Arc::clone(&db), logs);
+
+        let src_dir = dir.path().join("src_lance");
+        let dst_dir = dir.path().join("dst_lance");
+        let dst_reembed_dir = dir.path().join("dst_reembed");
+
+        let src_inst = db
+            .create_instance(CreateInstancePayload {
+                name: "Src Lance".to_string(),
+                description: None,
+                color: None,
+                group_id: None,
+                engine_type: "lancedb".to_string(),
+                engine_version: "embedded-1.0".to_string(),
+                host: None,
+                port: 0,
+                grpc_port: None,
+                data_dir: Some(src_dir.to_string_lossy().into_owned()),
+                config_json: None,
+                auto_start: None,
+                idle_timeout_minutes: None,
+                tag_ids: None,
+            })
+            .expect("create src inst");
+
+        let dst_inst = db
+            .create_instance(CreateInstancePayload {
+                name: "Dst Lance".to_string(),
+                description: None,
+                color: None,
+                group_id: None,
+                engine_type: "lancedb".to_string(),
+                engine_version: "embedded-1.0".to_string(),
+                host: None,
+                port: 0,
+                grpc_port: None,
+                data_dir: Some(dst_dir.to_string_lossy().into_owned()),
+                config_json: None,
+                auto_start: None,
+                idle_timeout_minutes: None,
+                tag_ids: None,
+            })
+            .expect("create dst inst");
+
+        let dst_reembed_inst = db
+            .create_instance(CreateInstancePayload {
+                name: "Dst Reembed".to_string(),
+                description: None,
+                color: None,
+                group_id: None,
+                engine_type: "lancedb".to_string(),
+                engine_version: "embedded-1.0".to_string(),
+                host: None,
+                port: 0,
+                grpc_port: None,
+                data_dir: Some(dst_reembed_dir.to_string_lossy().into_owned()),
+                config_json: None,
+                auto_start: None,
+                idle_timeout_minutes: None,
+                tag_ids: None,
+            })
+            .expect("create dst reembed inst");
+
+        let src_adapter = LanceDbAdapter::new(src_dir.clone()).expect("src lance");
+        src_adapter
+            .create_collection(CreateCollectionRequest {
+                name: "notes".to_string(),
+                dimensions: 3,
+                distance_metric: "cosine".to_string(),
+                index_type: None,
+            })
+            .await
+            .expect("create src col");
+        src_adapter
+            .upsert_records(
+                "notes",
+                vec![
+                    VectorRecord {
+                        id: "1".to_string(),
+                        payload: json!({"tag": "keep", "body": "First note"}),
+                        document: Some("First note".to_string()),
+                        vector: Some(vec![1.0, 0.0, 0.0]),
+                        score: None,
+                    },
+                    VectorRecord {
+                        id: "2".to_string(),
+                        payload: json!({"tag": "skip", "body": "Second note"}),
+                        document: Some("Second note".to_string()),
+                        vector: Some(vec![0.0, 1.0, 0.0]),
+                        score: None,
+                    },
+                ],
+            )
+            .await
+            .expect("seed src");
+
+        // 1. Direct filtered migration
+        let res = migrate_collection_impl(
+            &db,
+            &pm,
+            None,
+            MigrateCollectionRequest {
+                source_target: ConnectionTarget::LocalInstance {
+                    instance_id: src_inst.id.clone(),
+                },
+                source_collection: "notes".to_string(),
+                dest_target: ConnectionTarget::LocalInstance {
+                    instance_id: dst_inst.id.clone(),
+                },
+                dest_collection: "notes_copy".to_string(),
+                create_dest_if_missing: true,
+                dest_dimensions: None,
+                dest_distance_metric: None,
+                filter: Some(FilterSpec::RawJson {
+                    json: json!({"tag": "keep"}),
+                }),
+                reembed_profile_id: None,
+                reembed_text_field: None,
+                batch_size: Some(10),
+                max_records: None,
+            },
+        )
+        .await
+        .expect("direct migration");
+        assert_eq!(res.migrated, 1);
+        assert_eq!(res.failed, 0);
+
+        let dst_adapter = LanceDbAdapter::new(dst_dir).expect("dst lance");
+        let dst_info = dst_adapter
+            .get_collection_info("notes_copy")
+            .await
+            .expect("dst col info");
+        assert_eq!(dst_info.vector_count, 1);
+        assert_eq!(dst_info.dimensions, Some(3));
+
+        // 2. Re-embedding migration using a mock embedding server
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        let server = tokio::spawn(async move {
+            loop {
+                let Ok((mut sock, _)) = listener.accept().await else {
+                    break;
+                };
+                let mut buf = [0u8; 4096];
+                let _ = sock.read(&mut buf).await;
+                let body = serde_json::to_string(&json!({
+                    "embeddings": [[0.2, 0.4, 0.6, 0.8], [0.1, 0.3, 0.5, 0.7]]
+                }))
+                .expect("json");
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = sock.write_all(resp.as_bytes()).await;
+                let _ = sock.shutdown().await;
+            }
+        });
+
+        let profile = create_embedding_profile_impl(
+            &db,
+            CreateEmbeddingProfilePayload {
+                name: "Mock 4d".to_string(),
+                provider: "ollama".to_string(),
+                model_name: "mock".to_string(),
+                base_url: Some(format!("http://127.0.0.1:{}", port)),
+                dimensions: Some(4),
+                api_key: None,
+            },
+        )
+        .expect("create profile");
+
+        let reembed_res = migrate_collection_impl(
+            &db,
+            &pm,
+            None,
+            MigrateCollectionRequest {
+                source_target: ConnectionTarget::LocalInstance {
+                    instance_id: src_inst.id.clone(),
+                },
+                source_collection: "notes".to_string(),
+                dest_target: ConnectionTarget::LocalInstance {
+                    instance_id: dst_reembed_inst.id.clone(),
+                },
+                dest_collection: "notes_4d".to_string(),
+                create_dest_if_missing: true,
+                dest_dimensions: None,
+                dest_distance_metric: Some("dot".to_string()),
+                filter: None,
+                reembed_profile_id: Some(profile.id.clone()),
+                reembed_text_field: Some("body".to_string()),
+                batch_size: None,
+                max_records: None,
+            },
+        )
+        .await
+        .expect("reembed migration");
+        assert_eq!(reembed_res.migrated, 2);
+        assert_eq!(reembed_res.failed, 0);
+        server.abort();
+
+        let reembed_adapter = LanceDbAdapter::new(dst_reembed_dir).expect("dst reembed");
+        let reembed_info = reembed_adapter
+            .get_collection_info("notes_4d")
+            .await
+            .expect("reembed info");
+        assert_eq!(reembed_info.dimensions, Some(4));
+        assert_eq!(reembed_info.distance_metric.as_deref(), Some("dot"));
+
+        // 3. Read-only destination must be blocked
+        let ro_conn = create_remote_connection_impl(
+            &db,
+            CreateRemoteConnectionPayload {
+                name: "RO Dest".to_string(),
+                description: None,
+                color: None,
+                group_id: None,
+                engine_type: "qdrant".to_string(),
+                endpoint_url: "http://127.0.0.1:6333".to_string(),
+                auth_type: "none".to_string(),
+                secret: None,
+                extra_json: None,
+                read_only: Some(true),
+                tag_ids: None,
+            },
+        )
+        .expect("create ro conn");
+
+        let ro_err = migrate_collection_impl(
+            &db,
+            &pm,
+            None,
+            MigrateCollectionRequest {
+                source_target: ConnectionTarget::LocalInstance {
+                    instance_id: src_inst.id,
+                },
+                source_collection: "notes".to_string(),
+                dest_target: ConnectionTarget::RemoteConnection {
+                    connection_id: ro_conn.id,
+                },
+                dest_collection: "blocked".to_string(),
+                create_dest_if_missing: true,
+                dest_dimensions: None,
+                dest_distance_metric: None,
+                filter: None,
+                reembed_profile_id: None,
+                reembed_text_field: None,
+                batch_size: None,
+                max_records: None,
+            },
+        )
+        .await
+        .expect_err("read-only destination rejected");
+        assert!(ro_err.contains("Read-Only"));
     }
 }

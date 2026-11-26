@@ -35,6 +35,7 @@ export function ExplorerFloatingSwitcher({
   connectionName,
   target,
   ready,
+  readOnly = false,
   connectingKey = null,
   onSwitchConnection,
   onCreateCollection,
@@ -48,6 +49,7 @@ export function ExplorerFloatingSwitcher({
   connectionName: string | null;
   target: ConnectionTarget | null;
   ready: boolean;
+  readOnly?: boolean;
   connectingKey?: string | null;
   onSwitchConnection: (
     key: string,
@@ -278,12 +280,13 @@ export function ExplorerFloatingSwitcher({
             </button>
             <button
               type="button"
+              disabled={readOnly}
               onClick={() => {
                 onClose();
                 onCreateCollection();
               }}
-              title="New Collection"
-              className="inline-flex h-5 w-5 items-center justify-center rounded text-[var(--accent-primary)] hover:bg-[var(--bg-elevated)] cursor-pointer"
+              title={readOnly ? "Disabled in Read-Only mode" : "New Collection"}
+              className="inline-flex h-5 w-5 items-center justify-center rounded text-[var(--accent-primary)] hover:bg-[var(--bg-elevated)] disabled:pointer-events-none disabled:opacity-35 cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
@@ -375,13 +378,19 @@ export function ExplorerFloatingSwitcher({
                     )}
                     <button
                       type="button"
+                      disabled={readOnly}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (readOnly) return;
                         onClose();
                         onRequestDeleteCollection(col.name);
                       }}
-                      title={`Delete ${col.name}`}
-                      className="inline-flex h-5 w-5 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 text-[var(--text-muted)] hover:bg-[var(--status-error)]/15 hover:text-[var(--status-error)] cursor-pointer"
+                      title={
+                        readOnly
+                          ? "Disabled in Read-Only mode"
+                          : `Delete ${col.name}`
+                      }
+                      className="inline-flex h-5 w-5 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 text-[var(--text-muted)] hover:bg-[var(--status-error)]/15 hover:text-[var(--status-error)] disabled:pointer-events-none disabled:opacity-0 cursor-pointer"
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>

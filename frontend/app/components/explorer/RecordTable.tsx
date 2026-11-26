@@ -24,6 +24,7 @@ export function RecordTable({
   loading,
   selectedId,
   showScore = false,
+  readOnly = false,
   totalCount,
   pageInfo,
   canPrev,
@@ -38,6 +39,7 @@ export function RecordTable({
   loading: boolean;
   selectedId: string | null;
   showScore?: boolean;
+  readOnly?: boolean;
   totalCount?: number | null;
   pageInfo?: string;
   canPrev?: boolean;
@@ -231,12 +233,13 @@ export function RecordTable({
             </button>
             <button
               type="button"
+              disabled={readOnly}
               onClick={(e) => {
                 e.stopPropagation();
-                onDeleteRecords([row.original.id]);
+                if (!readOnly) onDeleteRecords([row.original.id]);
               }}
-              title="Delete Record"
-              className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--status-error)]/15 hover:text-[var(--status-error)] cursor-pointer"
+              title={readOnly ? "Disabled in Read-Only mode" : "Delete Record"}
+              className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--status-error)]/15 hover:text-[var(--status-error)] disabled:pointer-events-none disabled:opacity-35 cursor-pointer"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -252,6 +255,7 @@ export function RecordTable({
     selectedKeys.length,
     checkedIds,
     showScore,
+    readOnly,
     onSelectRecord,
     onFindSimilar,
     onDeleteRecords,
@@ -292,7 +296,7 @@ export function RecordTable({
             )}{" "}
             records
           </span>
-          {selectedKeys.length > 0 && (
+          {selectedKeys.length > 0 && !readOnly && (
             <Button
               type="button"
               variant="destructive"

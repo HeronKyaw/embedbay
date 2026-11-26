@@ -28,6 +28,23 @@ export function FilterBuilder({
   );
   const [rawError, setRawError] = React.useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (value?.mode === "raw_json") {
+      const next = JSON.stringify(value.json ?? {}, null, 2);
+      setRawText((prev) => {
+        try {
+          if (JSON.stringify(JSON.parse(prev || "{}"), null, 2) === next) {
+            return prev;
+          }
+        } catch {
+          // Replace invalid local draft when restored externally
+        }
+        return next;
+      });
+      setRawError(null);
+    }
+  }, [value]);
+
   const visualLogic = value?.mode === "visual" ? value.logic : "and";
   const conditions: FilterCondition[] =
     value?.mode === "visual" ? value.conditions : [];

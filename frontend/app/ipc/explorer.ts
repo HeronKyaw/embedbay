@@ -3,11 +3,17 @@ import { isTauriRuntime } from "@/ipc/system";
 import type {
   BrowseRecordsRequest,
   BrowseRecordsResponse,
+  CollectionIndexInfo,
   CollectionSchema,
   CollectionSummary,
   ConnectionTarget,
   ConnectionTestResult,
   CreateCollectionRequest,
+  CreateIndexRequest,
+  SaveSearchHistoryPayload,
+  SaveSearchPresetPayload,
+  SearchHistoryItem,
+  SearchPreset,
   SearchRequest,
   SearchResponse,
   VectorRecord,
@@ -87,5 +93,90 @@ export async function searchVectors(
     target,
     collection,
     query,
+  });
+}
+
+export async function listSearchHistory(
+  connectionKey: string,
+  collection: string,
+  limit?: number,
+): Promise<SearchHistoryItem[]> {
+  if (!isTauriRuntime()) return [];
+  return invoke<SearchHistoryItem[]>("list_search_history", {
+    connectionKey,
+    collection,
+    limit,
+  });
+}
+
+export async function recordSearchHistory(
+  payload: SaveSearchHistoryPayload,
+): Promise<SearchHistoryItem> {
+  return invoke<SearchHistoryItem>("record_search_history", { payload });
+}
+
+export async function clearSearchHistory(
+  connectionKey: string,
+  collection: string,
+): Promise<number> {
+  return invoke<number>("clear_search_history", {
+    connectionKey,
+    collection,
+  });
+}
+
+export async function listSearchPresets(
+  connectionKey: string,
+  collection: string,
+): Promise<SearchPreset[]> {
+  if (!isTauriRuntime()) return [];
+  return invoke<SearchPreset[]>("list_search_presets", {
+    connectionKey,
+    collection,
+  });
+}
+
+export async function saveSearchPreset(
+  payload: SaveSearchPresetPayload,
+): Promise<SearchPreset> {
+  return invoke<SearchPreset>("save_search_preset", { payload });
+}
+
+export async function deleteSearchPreset(id: string): Promise<boolean> {
+  return invoke<boolean>("delete_search_preset", { id });
+}
+
+export async function listCollectionIndexes(
+  target: ConnectionTarget,
+  collection: string,
+): Promise<CollectionIndexInfo[]> {
+  if (!isTauriRuntime()) return [];
+  return invoke<CollectionIndexInfo[]>("list_collection_indexes", {
+    target,
+    collection,
+  });
+}
+
+export async function createCollectionIndex(
+  target: ConnectionTarget,
+  collection: string,
+  request: CreateIndexRequest,
+): Promise<void> {
+  return invoke<void>("create_collection_index", {
+    target,
+    collection,
+    request,
+  });
+}
+
+export async function deleteCollectionIndex(
+  target: ConnectionTarget,
+  collection: string,
+  indexName: string,
+): Promise<void> {
+  return invoke<void>("delete_collection_index", {
+    target,
+    collection,
+    indexName,
   });
 }

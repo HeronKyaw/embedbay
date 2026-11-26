@@ -1,8 +1,11 @@
 import {
   ArrowUpDown,
+  DatabaseZap,
   Layers,
+  Lock,
   Plus,
   RefreshCw,
+  Repeat2,
   ScatterChart,
   Search,
   Trash2,
@@ -16,21 +19,27 @@ export function CollectionHeader({
   schema,
   collectionName,
   loading,
+  readOnly = false,
   onRefresh,
   onUpsertRecord,
   onOpenSearch,
   onOpenVisualizer,
   onOpenImportExport,
+  onOpenMigrate,
+  onOpenIndexes,
   onDeleteCollection,
 }: {
   schema: CollectionSchema | null;
   collectionName: string;
   loading: boolean;
+  readOnly?: boolean;
   onRefresh: () => void;
   onUpsertRecord: () => void;
   onOpenSearch: () => void;
   onOpenVisualizer?: () => void;
   onOpenImportExport?: () => void;
+  onOpenMigrate?: () => void;
+  onOpenIndexes?: () => void;
   onDeleteCollection: () => void;
 }) {
   const displayName = schema?.name ?? collectionName;
@@ -46,6 +55,12 @@ export function CollectionHeader({
           >
             {displayName}
           </h2>
+          {readOnly && (
+            <Badge variant="warning" className="shrink-0 text-[10px]">
+              <Lock className="h-2.5 w-2.5" />
+              Read-Only
+            </Badge>
+          )}
         </div>
 
         <div className="flex min-h-5 flex-wrap items-center gap-1.5 @min-[740px]:col-span-2 @min-[740px]:row-start-2">
@@ -102,7 +117,13 @@ export function CollectionHeader({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 @min-[740px]:col-start-2 @min-[740px]:row-start-1 @min-[740px]:flex-nowrap @min-[740px]:justify-end">
-          <Button type="button" size="sm" onClick={onUpsertRecord}>
+          <Button
+            type="button"
+            size="sm"
+            disabled={readOnly}
+            title={readOnly ? "Disabled in Read-Only mode" : "Upsert Record"}
+            onClick={onUpsertRecord}
+          >
             <Plus className="h-3.5 w-3.5" />
             Upsert Record
           </Button>
@@ -137,6 +158,28 @@ export function CollectionHeader({
               Import / Export
             </Button>
           )}
+          {onOpenMigrate && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onOpenMigrate}
+            >
+              <Repeat2 className="h-3.5 w-3.5" />
+              Migrate
+            </Button>
+          )}
+          {onOpenIndexes && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onOpenIndexes}
+            >
+              <DatabaseZap className="h-3.5 w-3.5" />
+              Indexes
+            </Button>
+          )}
           <Button
             type="button"
             variant="ghost"
@@ -152,7 +195,8 @@ export function CollectionHeader({
             type="button"
             variant="ghost"
             size="icon"
-            title="Delete Collection"
+            disabled={readOnly}
+            title={readOnly ? "Disabled in Read-Only mode" : "Delete Collection"}
             onClick={onDeleteCollection}
           >
             <Trash2 className="h-3.5 w-3.5 text-[var(--status-error)]" />

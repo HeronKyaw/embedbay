@@ -122,6 +122,7 @@ pub struct RemoteConnection {
     pub auth_type: String,
     pub secret_ref: Option<String>,
     pub extra_json: String,
+    pub read_only: bool,
     pub sort_order: i64,
     pub created_at: i64,
     pub tag_ids: Vec<String>,
@@ -138,6 +139,8 @@ pub struct CreateRemoteConnectionPayload {
     pub auth_type: String,
     pub secret: Option<String>,
     pub extra_json: Option<String>,
+    #[serde(default)]
+    pub read_only: Option<bool>,
     pub tag_ids: Option<Vec<String>>,
 }
 
@@ -152,6 +155,7 @@ pub struct UpdateRemoteConnectionPayload {
     pub auth_type: Option<String>,
     pub secret: Option<Option<String>>,
     pub extra_json: Option<String>,
+    pub read_only: Option<bool>,
     pub sort_order: Option<i64>,
     pub tag_ids: Option<Vec<String>>,
 }
@@ -197,6 +201,68 @@ pub struct TestEmbeddingProfileDraftPayload {
     pub model_name: String,
     pub base_url: Option<String>,
     pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchHistoryItem {
+    pub id: String,
+    pub connection_key: String,
+    pub collection: String,
+    pub search_mode: String,
+    pub query_text: Option<String>,
+    pub vector_json: Option<String>,
+    pub embedding_profile_id: Option<String>,
+    pub top_k: i64,
+    pub score_threshold: Option<f64>,
+    pub filter_json: Option<String>,
+    pub result_count: i64,
+    pub latency_ms: Option<i64>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SaveSearchHistoryPayload {
+    pub connection_key: String,
+    pub collection: String,
+    pub search_mode: String,
+    pub query_text: Option<String>,
+    pub vector_json: Option<String>,
+    pub embedding_profile_id: Option<String>,
+    pub top_k: i64,
+    pub score_threshold: Option<f64>,
+    pub filter_json: Option<String>,
+    pub result_count: i64,
+    pub latency_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchPreset {
+    pub id: String,
+    pub name: String,
+    pub connection_key: String,
+    pub collection: String,
+    pub search_mode: String,
+    pub query_text: Option<String>,
+    pub vector_json: Option<String>,
+    pub embedding_profile_id: Option<String>,
+    pub top_k: i64,
+    pub score_threshold: Option<f64>,
+    pub filter_json: Option<String>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SaveSearchPresetPayload {
+    pub name: String,
+    pub connection_key: String,
+    pub collection: String,
+    pub search_mode: String,
+    pub query_text: Option<String>,
+    pub vector_json: Option<String>,
+    pub embedding_profile_id: Option<String>,
+    pub top_k: i64,
+    pub score_threshold: Option<f64>,
+    pub filter_json: Option<String>,
 }
 
 fn deserialize_double_option<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>

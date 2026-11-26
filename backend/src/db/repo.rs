@@ -786,7 +786,7 @@ impl Database {
         let mut tag_map = load_entity_tags_map(&conn, "remote_connection")?;
         let mut stmt = conn.prepare(
             "SELECT id, name, description, color, group_id, engine_type, endpoint_url,
-                    auth_type, secret_ref, extra_json, sort_order, created_at
+                    auth_type, secret_ref, extra_json, read_only, sort_order, created_at
              FROM remote_connections
              ORDER BY sort_order ASC, created_at ASC",
         )?;
@@ -802,8 +802,9 @@ impl Database {
                 auth_type: row.get(7)?,
                 secret_ref: row.get(8)?,
                 extra_json: row.get(9)?,
-                sort_order: row.get(10)?,
-                created_at: row.get(11)?,
+                read_only: row.get::<_, i64>(10)? != 0,
+                sort_order: row.get(11)?,
+                created_at: row.get(12)?,
                 tag_ids: Vec::new(),
             })
         })?;
@@ -823,7 +824,7 @@ impl Database {
         let opt = conn
             .query_row(
                 "SELECT id, name, description, color, group_id, engine_type, endpoint_url,
-                        auth_type, secret_ref, extra_json, sort_order, created_at
+                        auth_type, secret_ref, extra_json, read_only, sort_order, created_at
                  FROM remote_connections
                  WHERE id = ?1",
                 params![id],
@@ -839,8 +840,9 @@ impl Database {
                         auth_type: row.get(7)?,
                         secret_ref: row.get(8)?,
                         extra_json: row.get(9)?,
-                        sort_order: row.get(10)?,
-                        created_at: row.get(11)?,
+                        read_only: row.get::<_, i64>(10)? != 0,
+                        sort_order: row.get(11)?,
+                        created_at: row.get(12)?,
                         tag_ids: Vec::new(),
                     })
                 },
@@ -872,6 +874,7 @@ impl Database {
             .extra_json
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| "{}".to_string());
+        let read_only = payload.read_only.unwrap_or(false);
         let tag_ids = payload.tag_ids.unwrap_or_default();
 
         let mut conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
@@ -884,8 +887,8 @@ impl Database {
         tx.execute(
             "INSERT INTO remote_connections (
                 id, name, description, color, group_id, engine_type, endpoint_url,
-                auth_type, secret_ref, extra_json, sort_order, created_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                auth_type, secret_ref, extra_json, read_only, sort_order, created_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 id,
                 name,
@@ -897,6 +900,7 @@ impl Database {
                 payload.auth_type,
                 secret_ref,
                 extra_json,
+                if read_only { 1 } else { 0 },
                 next_order,
                 created_at
             ],
@@ -918,6 +922,7 @@ impl Database {
             auth_type: payload.auth_type,
             secret_ref,
             extra_json,
+            read_only,
             sort_order: next_order,
             created_at,
             tag_ids: resolved_tags,
@@ -967,6 +972,9 @@ impl Database {
         if let Some(extra_json) = payload.extra_json {
             item.extra_json = extra_json;
         }
+        if let Some(read_only) = payload.read_only {
+            item.read_only = read_only;
+        }
         if let Some(sort_order) = payload.sort_order {
             item.sort_order = sort_order;
         }
@@ -976,8 +984,8 @@ impl Database {
         tx.execute(
             "UPDATE remote_connections SET
                 name = ?1, description = ?2, color = ?3, group_id = ?4, engine_type = ?5,
-                endpoint_url = ?6, auth_type = ?7, secret_ref = ?8, extra_json = ?9, sort_order = ?10
-             WHERE id = ?11",
+                endpoint_url = ?6, auth_type = ?7, secret_ref = ?8, extra_json = ?9, read_only = ?10, sort_order = ?11
+             WHERE id = ?12",
             params![
                 item.name,
                 item.description,
@@ -988,6 +996,7 @@ impl Database {
                 item.auth_type,
                 item.secret_ref,
                 item.extra_json,
+                if item.read_only { 1 } else { 0 },
                 item.sort_order,
                 item.id
             ],
@@ -1149,6 +1158,213 @@ impl Database {
     pub fn delete_embedding_profile(&self, id: &str) -> Result<bool, DbError> {
         let conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
         let affected = conn.execute("DELETE FROM embedding_profiles WHERE id = ?1", params![id])?;
+        Ok(affected > 0)
+    }
+
+    // -----------------------------------------------------------------------
+    // Search History & Saved Presets
+    // -----------------------------------------------------------------------
+
+    pub fn list_search_history(
+        &self,
+        connection_key: &str,
+        collection: &str,
+        limit: Option<usize>,
+    ) -> Result<Vec<SearchHistoryItem>, DbError> {
+        let conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
+        let capped = limit.unwrap_or(100).clamp(1, 100) as i64;
+        let mut stmt = conn.prepare(
+            "SELECT id, connection_key, collection, search_mode, query_text, vector_json,
+                    embedding_profile_id, top_k, score_threshold, filter_json, result_count,
+                    latency_ms, created_at
+             FROM search_history
+             WHERE connection_key = ?1 AND collection = ?2
+             ORDER BY created_at DESC, rowid DESC
+             LIMIT ?3",
+        )?;
+        let rows = stmt.query_map(params![connection_key, collection, capped], |row| {
+            Ok(SearchHistoryItem {
+                id: row.get(0)?,
+                connection_key: row.get(1)?,
+                collection: row.get(2)?,
+                search_mode: row.get(3)?,
+                query_text: row.get(4)?,
+                vector_json: row.get(5)?,
+                embedding_profile_id: row.get(6)?,
+                top_k: row.get(7)?,
+                score_threshold: row.get(8)?,
+                filter_json: row.get(9)?,
+                result_count: row.get(10)?,
+                latency_ms: row.get(11)?,
+                created_at: row.get(12)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(DbError::from)
+    }
+
+    pub fn record_search_history(
+        &self,
+        payload: SaveSearchHistoryPayload,
+    ) -> Result<SearchHistoryItem, DbError> {
+        let id = Uuid::new_v4().to_string();
+        let created_at = now_unix_secs();
+        let top_k = payload.top_k.max(1);
+
+        let mut conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
+        let tx = conn.transaction()?;
+        tx.execute(
+            "INSERT INTO search_history (
+                id, connection_key, collection, search_mode, query_text, vector_json,
+                embedding_profile_id, top_k, score_threshold, filter_json, result_count,
+                latency_ms, created_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            params![
+                id,
+                payload.connection_key,
+                payload.collection,
+                payload.search_mode,
+                payload.query_text,
+                payload.vector_json,
+                payload.embedding_profile_id,
+                top_k,
+                payload.score_threshold,
+                payload.filter_json,
+                payload.result_count,
+                payload.latency_ms,
+                created_at
+            ],
+        )?;
+
+        tx.execute(
+            "DELETE FROM search_history
+             WHERE connection_key = ?1 AND collection = ?2
+               AND id NOT IN (
+                 SELECT id FROM search_history
+                 WHERE connection_key = ?1 AND collection = ?2
+                 ORDER BY created_at DESC, rowid DESC
+                 LIMIT 100
+               )",
+            params![payload.connection_key, payload.collection],
+        )?;
+        tx.commit()?;
+
+        Ok(SearchHistoryItem {
+            id,
+            connection_key: payload.connection_key,
+            collection: payload.collection,
+            search_mode: payload.search_mode,
+            query_text: payload.query_text,
+            vector_json: payload.vector_json,
+            embedding_profile_id: payload.embedding_profile_id,
+            top_k,
+            score_threshold: payload.score_threshold,
+            filter_json: payload.filter_json,
+            result_count: payload.result_count,
+            latency_ms: payload.latency_ms,
+            created_at,
+        })
+    }
+
+    pub fn clear_search_history(
+        &self,
+        connection_key: &str,
+        collection: &str,
+    ) -> Result<usize, DbError> {
+        let conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
+        let affected = conn.execute(
+            "DELETE FROM search_history WHERE connection_key = ?1 AND collection = ?2",
+            params![connection_key, collection],
+        )?;
+        Ok(affected)
+    }
+
+    pub fn list_search_presets(
+        &self,
+        connection_key: &str,
+        collection: &str,
+    ) -> Result<Vec<SearchPreset>, DbError> {
+        let conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, connection_key, collection, search_mode, query_text, vector_json,
+                    embedding_profile_id, top_k, score_threshold, filter_json, created_at
+             FROM search_presets
+             WHERE connection_key = ?1 AND collection = ?2
+             ORDER BY created_at DESC, rowid DESC",
+        )?;
+        let rows = stmt.query_map(params![connection_key, collection], |row| {
+            Ok(SearchPreset {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                connection_key: row.get(2)?,
+                collection: row.get(3)?,
+                search_mode: row.get(4)?,
+                query_text: row.get(5)?,
+                vector_json: row.get(6)?,
+                embedding_profile_id: row.get(7)?,
+                top_k: row.get(8)?,
+                score_threshold: row.get(9)?,
+                filter_json: row.get(10)?,
+                created_at: row.get(11)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(DbError::from)
+    }
+
+    pub fn save_search_preset(
+        &self,
+        payload: SaveSearchPresetPayload,
+    ) -> Result<SearchPreset, DbError> {
+        let name = payload.name.trim().to_string();
+        if name.is_empty() {
+            return Err(DbError::Validation(
+                "Preset name cannot be empty".to_string(),
+            ));
+        }
+        let id = Uuid::new_v4().to_string();
+        let created_at = now_unix_secs();
+        let top_k = payload.top_k.max(1);
+
+        let conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
+        conn.execute(
+            "INSERT INTO search_presets (
+                id, name, connection_key, collection, search_mode, query_text, vector_json,
+                embedding_profile_id, top_k, score_threshold, filter_json, created_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                id,
+                name,
+                payload.connection_key,
+                payload.collection,
+                payload.search_mode,
+                payload.query_text,
+                payload.vector_json,
+                payload.embedding_profile_id,
+                top_k,
+                payload.score_threshold,
+                payload.filter_json,
+                created_at
+            ],
+        )?;
+
+        Ok(SearchPreset {
+            id,
+            name,
+            connection_key: payload.connection_key,
+            collection: payload.collection,
+            search_mode: payload.search_mode,
+            query_text: payload.query_text,
+            vector_json: payload.vector_json,
+            embedding_profile_id: payload.embedding_profile_id,
+            top_k,
+            score_threshold: payload.score_threshold,
+            filter_json: payload.filter_json,
+            created_at,
+        })
+    }
+
+    pub fn delete_search_preset(&self, id: &str) -> Result<bool, DbError> {
+        let conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
+        let affected = conn.execute("DELETE FROM search_presets WHERE id = ?1", params![id])?;
         Ok(affected > 0)
     }
 }

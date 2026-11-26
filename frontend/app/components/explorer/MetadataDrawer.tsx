@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Lock,
   Save,
   Sparkles,
   Trash2,
@@ -78,6 +79,7 @@ function renderMetadataValue(value: unknown): React.ReactNode {
 
 export function MetadataDrawer({
   record,
+  readOnly = false,
   positionLabel,
   hasPrev = false,
   hasNext = false,
@@ -89,6 +91,7 @@ export function MetadataDrawer({
   onDelete,
 }: {
   record: VectorRecord | null;
+  readOnly?: boolean;
   positionLabel?: string;
   hasPrev?: boolean;
   hasNext?: boolean;
@@ -209,6 +212,12 @@ export function MetadataDrawer({
                   Score {record.score.toFixed(5)}
                 </Badge>
               )}
+              {readOnly && (
+                <Badge variant="warning" className="text-[10px]">
+                  <Lock className="h-2.5 w-2.5" />
+                  Read-Only
+                </Badge>
+              )}
             </div>
 
             <div className="flex items-center gap-1">
@@ -297,6 +306,7 @@ export function MetadataDrawer({
             <textarea
               rows={7}
               value={documentText}
+              readOnly={readOnly}
               onChange={(e) => setDocumentText(e.target.value)}
               placeholder="(no document text)"
               className="w-full resize-y rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] p-3 text-[13px] leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-primary)] focus:outline-none"
@@ -398,6 +408,7 @@ export function MetadataDrawer({
               <textarea
                 rows={12}
                 value={payloadText}
+                readOnly={readOnly}
                 onChange={(e) => setPayloadText(e.target.value)}
                 className="w-full resize-y rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] p-3 font-mono text-xs leading-relaxed text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
               />
@@ -457,6 +468,8 @@ export function MetadataDrawer({
                 type="button"
                 variant="ghost"
                 size="sm"
+                disabled={readOnly}
+                title={readOnly ? "Disabled in Read-Only mode" : "Delete record"}
                 onClick={() => void onDelete(record.id)}
                 className="text-[var(--status-error)] hover:bg-[var(--status-error)]/10 hover:text-[var(--status-error)]"
               >
@@ -471,7 +484,8 @@ export function MetadataDrawer({
               <Button
                 type="button"
                 size="sm"
-                disabled={saving || !isDirty}
+                disabled={readOnly || saving || !isDirty}
+                title={readOnly ? "Disabled in Read-Only mode" : "Save Changes"}
                 onClick={() => void handleSave()}
               >
                 <Save className="h-3.5 w-3.5" />
