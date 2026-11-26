@@ -18,7 +18,7 @@ import type { VectorRecord } from "@/types/explorer";
 import { SWATCH_PRESETS } from "@/types/system";
 
 export function EmbeddingScatterPlot({ tab }: { tab: WorkspaceTab }) {
-  const theme = useAppStore((s) => s.theme);
+  const resolvedTheme = useAppStore((s) => s.resolvedTheme);
   const updateTab = useTabsStore((s) => s.updateTab);
   const openSearchTab = useTabsStore((s) => s.openSearchTab);
 
@@ -101,7 +101,7 @@ export function EmbeddingScatterPlot({ tab }: { tab: WorkspaceTab }) {
       return;
     }
 
-    const isDark = theme === "dark";
+    const isDark = resolvedTheme === "dark";
     const bgCanvas = isDark ? "#090C12" : "#F8FAFC";
     const gridColor = isDark ? "#1E2738" : "#E2E8F0";
     const textColor = isDark ? "#94A3B8" : "#475569";
@@ -226,7 +226,7 @@ export function EmbeddingScatterPlot({ tab }: { tab: WorkspaceTab }) {
         }
       });
     });
-  }, [projection, records, dims, colorField, theme, tab.id, tab.collection, updateTab]);
+  }, [projection, records, dims, colorField, resolvedTheme, tab.id, tab.collection, updateTab]);
 
   React.useEffect(() => {
     const container = plotRef.current;

@@ -1,13 +1,20 @@
 import * as React from "react";
 import {
   Boxes,
+  Check,
+  Compass,
+  Cpu,
   Database,
+  HardDrive,
+  Info,
+  Monitor,
   Moon,
   PackagePlus,
   Play,
   Plus,
   Power,
   Settings,
+  Sparkles,
   Square,
   Sun,
   Terminal,
@@ -39,9 +46,10 @@ export function CommandPalette() {
   const setOpen = useAppStore((s) => s.setCommandPaletteOpen);
   const toggleCommandPalette = useAppStore((s) => s.toggleCommandPalette);
   const setActiveSection = useAppStore((s) => s.setActiveSection);
-  const setSettingsOpen = useAppStore((s) => s.setSettingsOpen);
+  const openSettings = useAppStore((s) => s.openSettings);
+  const setOnboardingOpen = useAppStore((s) => s.setOnboardingOpen);
   const theme = useAppStore((s) => s.theme);
-  const toggleTheme = useAppStore((s) => s.toggleTheme);
+  const setTheme = useAppStore((s) => s.setTheme);
   const appStatus = useAppStore((s) => s.appStatus);
   const setAppStatus = useAppStore((s) => s.setAppStatus);
 
@@ -63,6 +71,7 @@ export function CommandPalette() {
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (useAppStore.getState().onboardingOpen) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         toggleCommandPalette();
@@ -123,12 +132,67 @@ export function CommandPalette() {
             value="nav-settings-open-workspace-settings"
             onSelect={() => {
               setOpen(false);
-              setSettingsOpen(true);
+              openSettings("general");
             }}
           >
             <Settings className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
             <span>Open Settings</span>
             <CommandShortcut>Ctrl+,</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            value="nav-settings-embeddings"
+            onSelect={() => {
+              setOpen(false);
+              openSettings("embeddings");
+            }}
+          >
+            <Sparkles className="h-3.5 w-3.5 text-[var(--accent-ai)]" />
+            <span>Settings: Embedding Profiles</span>
+            <CommandShortcut>Settings</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            value="nav-settings-storage"
+            onSelect={() => {
+              setOpen(false);
+              openSettings("storage");
+            }}
+          >
+            <HardDrive className="h-3.5 w-3.5 text-[var(--accent-primary)]" />
+            <span>Settings: Storage</span>
+            <CommandShortcut>Settings</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            value="nav-settings-diagnostics"
+            onSelect={() => {
+              setOpen(false);
+              openSettings("diagnostics");
+            }}
+          >
+            <Cpu className="h-3.5 w-3.5 text-[var(--accent-secondary)]" />
+            <span>Settings: Diagnostics</span>
+            <CommandShortcut>Settings</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            value="nav-settings-about"
+            onSelect={() => {
+              setOpen(false);
+              openSettings("about");
+            }}
+          >
+            <Info className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+            <span>Settings: About & Updates</span>
+            <CommandShortcut>Settings</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            value="nav-onboarding-welcome-guide"
+            onSelect={() => {
+              setOpen(false);
+              setOnboardingOpen(true);
+            }}
+          >
+            <Compass className="h-3.5 w-3.5 text-[var(--accent-primary)]" />
+            <span>Open Welcome & Onboarding Guide</span>
+            <CommandShortcut>Guide</CommandShortcut>
           </CommandItem>
         </CommandGroup>
 
@@ -255,21 +319,49 @@ export function CommandPalette() {
 
         <CommandGroup heading="Appearance & System">
           <CommandItem
-            value="system-toggle-theme-dark-light"
+            value="system-theme-light"
             onSelect={() => {
-              toggleTheme();
+              setTheme("light");
               setOpen(false);
             }}
           >
-            {theme === "dark" ? (
-              <Sun className="h-3.5 w-3.5 text-[var(--status-starting)]" />
-            ) : (
-              <Moon className="h-3.5 w-3.5 text-[var(--accent-ai)]" />
+            <Sun className="h-3.5 w-3.5 text-[var(--status-starting)]" />
+            <span>Theme: Light</span>
+            {theme === "light" && (
+              <CommandShortcut>
+                <Check className="h-3.5 w-3.5 text-[var(--accent-primary)]" />
+              </CommandShortcut>
             )}
-            <span>
-              Switch to {theme === "dark" ? "Light Mode" : "Dark Mode"}
-            </span>
-            <CommandShortcut>Theme</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            value="system-theme-dark"
+            onSelect={() => {
+              setTheme("dark");
+              setOpen(false);
+            }}
+          >
+            <Moon className="h-3.5 w-3.5 text-[var(--accent-ai)]" />
+            <span>Theme: Dark</span>
+            {theme === "dark" && (
+              <CommandShortcut>
+                <Check className="h-3.5 w-3.5 text-[var(--accent-primary)]" />
+              </CommandShortcut>
+            )}
+          </CommandItem>
+          <CommandItem
+            value="system-theme-auto-system"
+            onSelect={() => {
+              setTheme("system");
+              setOpen(false);
+            }}
+          >
+            <Monitor className="h-3.5 w-3.5 text-[var(--accent-secondary)]" />
+            <span>Theme: Auto (Match OS)</span>
+            {theme === "system" && (
+              <CommandShortcut>
+                <Check className="h-3.5 w-3.5 text-[var(--accent-primary)]" />
+              </CommandShortcut>
+            )}
           </CommandItem>
           <CommandItem
             value="system-toggle-os-startup-autostart"

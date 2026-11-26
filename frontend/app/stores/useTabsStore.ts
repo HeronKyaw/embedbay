@@ -5,6 +5,7 @@ import {
 } from "@/ipc/connections";
 import { listCollections } from "@/ipc/explorer";
 import { formatUserError } from "@/lib/errors";
+import { useAppStore } from "@/stores/useAppStore";
 import type {
   CollectionSummary,
   ConnectionTarget,
@@ -145,10 +146,11 @@ function makeDefaultTab(
   partial: Partial<WorkspaceTab> &
     Pick<WorkspaceTab, "id" | "kind" | "title" | "connectionKey">,
 ): WorkspaceTab {
+  const prefs = useAppStore.getState().preferences;
   return {
     offset: 0,
     cursorHistory: [null],
-    limit: 50,
+    limit: prefs.defaultPageSize,
     includeVectors: true,
     filter: null,
     selectedRecord: null,
@@ -157,7 +159,7 @@ function makeDefaultTab(
     searchText: "",
     searchProfileId: "",
     searchVectorText: "",
-    searchTopK: 10,
+    searchTopK: prefs.defaultSearchTopK,
     searchScoreThreshold: null,
     searchResults: [],
     searchLatencyMs: null,
@@ -303,6 +305,12 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     }
 
     const profiles = get().embeddingProfiles;
+    const preferredId =
+      useAppStore.getState().preferences.defaultEmbeddingProfileId;
+    const resolvedProfileId =
+      preferredId && profiles.some((p) => p.id === preferredId)
+        ? preferredId
+        : (profiles[0]?.id ?? "");
     const vectorText =
       seedRecord?.vector && seedRecord.vector.length > 0
         ? JSON.stringify(seedRecord.vector)
@@ -318,7 +326,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       collection,
       searchMode: seedRecord ? "vector" : "text",
       searchVectorText: vectorText,
-      searchProfileId: profiles[0]?.id ?? "",
+      searchProfileId: resolvedProfileId,
     });
     set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
   },

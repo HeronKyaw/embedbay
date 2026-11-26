@@ -9,11 +9,18 @@
       (function () {
         try {
           var t = localStorage.getItem("embedbay-theme");
-          var theme = t === "light" || t === "dark" ? t : "dark";
+          var pref = t === "light" || t === "dark" || t === "system" ? t : "system";
+          var resolved =
+            pref === "system"
+              ? window.matchMedia &&
+                window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light"
+              : pref;
           var root = document.documentElement;
-          root.dataset.theme = theme;
+          root.dataset.theme = resolved;
           root.classList.remove("dark", "light");
-          root.classList.add(theme);
+          root.classList.add(resolved);
         } catch (e) {}
       })();
     </script>

@@ -1,14 +1,6 @@
 import * as React from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import {
-  Copy,
-  Minus,
-  Moon,
-  Search,
-  Square,
-  Sun,
-  X,
-} from "lucide-react";
+import { Copy, Minus, Search, Square, X } from "lucide-react";
 import { EmbedBayLogo } from "@/components/layout/EmbedBayLogo";
 import { isTauriRuntime } from "@/ipc/system";
 import { cn } from "@/lib/utils";
@@ -22,9 +14,8 @@ const SECTION_TAB_LABELS: Record<ActivitySection, string> = {
 };
 
 export function AdaptiveTitlebar() {
-  const theme = useAppStore((s) => s.theme);
-  const toggleTheme = useAppStore((s) => s.toggleTheme);
   const activeSection = useAppStore((s) => s.activeSection);
+  const onboardingOpen = useAppStore((s) => s.onboardingOpen);
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen);
   const appStatus = useAppStore((s) => s.appStatus);
 
@@ -68,6 +59,11 @@ export function AdaptiveTitlebar() {
     void getCurrentWindow().close();
   };
 
+  const closeTooltip =
+    appStatus?.close_behavior === "quit"
+      ? "Quit EmbedBay"
+      : "Close to System Tray";
+
   return (
     <header
       className={cn(
@@ -87,49 +83,33 @@ export function AdaptiveTitlebar() {
           </span>
           <span className="text-[var(--border-strong)]">/</span>
           <span className="text-[11px] font-medium text-[var(--text-secondary)]">
-            {SECTION_TAB_LABELS[activeSection]}
+            {onboardingOpen ? "Welcome" : SECTION_TAB_LABELS[activeSection]}
           </span>
         </span>
       </div>
 
-      {/* Center Drag Spacer + Ctrl+K Quick Search Trigger */}
+      {/* Center Drag Spacer + Ctrl+K Quick Search Trigger (hidden during onboarding) */}
       <div
         data-tauri-drag-region
         className="flex h-full flex-1 items-center justify-center px-3"
       >
-        <button
-          type="button"
-          onClick={() => setCommandPaletteOpen(true)}
-          className="flex h-6 w-full max-w-[300px] items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 text-[11px] text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)] cursor-pointer"
-        >
-          <Search className="h-3 w-3 shrink-0" />
-          <span className="truncate">Search commands, instances, tags...</span>
-          <kbd className="ml-auto rounded border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-1.5 py-0.5 font-mono text-[10px] leading-none text-[var(--text-secondary)]">
-            {shortcutLabel}
-          </kbd>
-        </button>
+        {!onboardingOpen && (
+          <button
+            type="button"
+            onClick={() => setCommandPaletteOpen(true)}
+            className="flex h-6 w-full max-w-[300px] items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 text-[11px] text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)] cursor-pointer"
+          >
+            <Search className="h-3 w-3 shrink-0" />
+            <span className="truncate">Search commands, instances, tags...</span>
+            <kbd className="ml-auto rounded border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-1.5 py-0.5 font-mono text-[10px] leading-none text-[var(--text-secondary)]">
+              {shortcutLabel}
+            </kbd>
+          </button>
+        )}
       </div>
 
-      {/* Right: Theme Switcher + Native-style Window Controls */}
+      {/* Right: Native-style Window Controls */}
       <div className="flex h-full items-center">
-        <button
-          type="button"
-          onClick={toggleTheme}
-          title={
-            theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"
-          }
-          aria-label={
-            theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"
-          }
-          className="mr-1.5 inline-flex h-7 w-7 items-center justify-center rounded text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] cursor-pointer"
-        >
-          {theme === "dark" ? (
-            <Sun className="h-3.5 w-3.5" />
-          ) : (
-            <Moon className="h-3.5 w-3.5" />
-          )}
-        </button>
-
         {!isMac && (
           <div className="flex h-full items-center border-l border-[var(--border-subtle)]">
             <button
@@ -157,8 +137,8 @@ export function AdaptiveTitlebar() {
             <button
               type="button"
               onClick={handleClose}
-              title="Close to System Tray"
-              aria-label="Close window to System Tray"
+              title={closeTooltip}
+              aria-label={closeTooltip}
               className="inline-flex h-full w-10 items-center justify-center text-[var(--text-secondary)] transition-colors hover:bg-[var(--status-error)] hover:text-white cursor-pointer"
             >
               <X className="h-3.5 w-3.5" />
