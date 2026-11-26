@@ -21,7 +21,7 @@ EmbedBay installs, runs, monitors, and explores local vector databases natively 
 - **Multi-Tab Explorer & CRUD**
   Inspect multiple local or remote collections side-by-side with a collection tree, schema/stats header, virtualized record table (`@tanstack/react-table` + `@tanstack/react-virtual`), right-side JSON payload drawer, and Create/Edit/Delete record & collection modals.
 - **Search Playground & Embedding Profiles**
-  Run raw vector similarity search, "Find Similar" from any row, visual or raw-JSON metadata filtering, latency/score histograms, and plain-text semantic search powered by **Ollama** or **OpenAI-compatible** embedding endpoints.
+  Run raw vector similarity search, "Find Similar" from any row, visual or raw-JSON metadata filtering, latency/score histograms, and plain-text semantic search powered by **Ollama**, **OpenAI-compatible**, **Google Gemini**, **Cohere**, **Voyage AI**, or **HuggingFace TEI** embedding endpoints.
 - **2D/3D WebGL Visualizer & Import/Export/Backup**
   Interactive WebGL scatter plots (`plotly.js-dist-min`) driven by Rust-side **PCA** and **UMAP** dimensionality reduction, JSONL/CSV batch import (with optional auto-embedding) & export, plus safe stop-before-zip **Backup / Restore**.
 - **OS Keyring Credential Security & Auto-Updater**
@@ -33,12 +33,19 @@ EmbedBay installs, runs, monitors, and explores local vector databases natively 
 
 ### Tier 1 — Local Managed & Embedded Engines
 
-| Engine | Version in Manifest | Mode | Default Port |
-| --- | --- | --- | --- |
-| **Qdrant** | `1.20.2` / `1.20.1` | Native daemon (`qdrant.exe`) | `6333` (HTTP), `6334` (gRPC) |
-| **Chroma** | `1.4.4` / `1.4.3` | Native CLI daemon (`chroma.exe run`) | `8000` |
-| **PostgreSQL + pgvector** | `17.9-pgvector0.8.6` | Portable `postgres.exe` + `vector.dll` | `5432` |
-| **LanceDB** | `embedded-1.0` | Embedded `.lance` directory reader (`0 MB` daemon RAM) | None |
+| Engine | Mode | Default Port |
+| --- | --- | --- |
+| **Qdrant** | Native daemon (`qdrant.exe`) | `6333` (HTTP), `6334` (gRPC) |
+| **Chroma** | Native CLI daemon (`chroma.exe run`) | `8000` |
+| **PostgreSQL + pgvector** | Portable `postgres.exe` + `vector.dll` | `5432` |
+| **LanceDB** | Built-in embedded `.lance` directory (`0 MB` idle RAM) | None |
+| **Meilisearch** | Native daemon (`meilisearch.exe`) | `7700` |
+| **SurrealDB** | Native daemon (`surreal.exe` + SurrealKV) | `8008` |
+| **SQLite + sqlite-vec** | Built-in embedded `vec0` (`vectors.db`, `0 MB` idle RAM) | None |
+| **Elasticsearch** | Bundled-JDK daemon (`elasticsearch.bat`) | `9200` |
+| **OpenSearch** | Bundled-JDK daemon (`opensearch.bat`) | `9201` |
+| **MariaDB 11.8 Vector** | Portable `mariadbd.exe` + `VECTOR(N)` | `3306` |
+| **DuckDB + vss** | On-demand embedded CLI (`duckdb.exe`, `0 MB` idle RAM) | None |
 
 ### Tier 2 — Remote Connections
 
@@ -47,10 +54,14 @@ Connect to self-hosted or managed clusters via unified `VectorDbAdapter` clients
 - **Qdrant** (remote HTTP/HTTPS)
 - **Chroma** (remote HTTP/HTTPS)
 - **PostgreSQL + pgvector** (`postgresql://` with optional TLS via `tokio-postgres-rustls`)
+- **Meilisearch** (remote HTTP/HTTPS)
+- **SurrealDB** (remote HTTP/HTTPS)
+- **Elasticsearch** (remote HTTP/HTTPS)
+- **OpenSearch** (remote HTTP/HTTPS)
+- **MariaDB 11.8 Vector** (`mysql://` / `mariadb://` with optional TLS via `rustls`)
 - **Pinecone**
 - **Weaviate**
 - **Milvus / Zilliz**
-- **Elasticsearch**
 - **Redis Stack** (RediSearch vector indexes)
 
 ---
@@ -90,6 +101,36 @@ embedbay/
 ├── docs/                       # User, developer, architecture, engine, and release docs
 └── .github/workflows/          # Windows CI/CD release pipeline
 ```
+
+---
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for the full public milestone breakdown.
+
+### v0.1 (Windows Launch)
+- [x] Native Engine Store (Qdrant, Chroma, PostgreSQL + pgvector, Meilisearch, SurrealDB, Elasticsearch, OpenSearch, MariaDB 11.8 Vector, embedded LanceDB, SQLite + sqlite-vec, DuckDB + vss) & `CREATE_NO_WINDOW` process supervision
+- [x] System Tray persistence, idle auto-stop, stop-before-zip Backup/Restore, OS Keyring secrets, and signed auto-updater
+- [x] Multi-Tab Explorer, 2D/3D PCA/UMAP WebGL Visualizer, JSONL/CSV Import/Export, and Tier 2 remote adapters
+- [x] Read-Only Safety Mode & Copy-as-Code Snippets (Python, TypeScript, `curl`, `psql`/SQL)
+- [x] Expanded HTTP Embedding Providers (Ollama, OpenAI-Compatible, Gemini, Cohere, Voyage AI, HuggingFace TEI)
+- [x] Search History, Saved Presets & Side-by-Side A/B Search Comparison
+- [x] Collection Migration & Re-Embedding Wizard
+- [x] Document Ingestion & Chunking Previewer (`.md` / `.txt`)
+- [x] Index & Schema Management for Qdrant & pgvector
+
+> *Note: Embedded LanceDB uses EmbedBay's portable directory format (`records.jsonl`) in v0.1 ahead of native Arrow/Lance binary support in v0.2.*
+
+### v0.2 (Engine & Ingestion Depth)
+- [ ] Native binary `.lance` table reader/writer (`lancedb` / Arrow) + `.parquet` import/export
+- [ ] Zero-setup local ONNX embeddings (`local_onnx`) via on-demand Engine Store downloads
+- [ ] PDF document ingestion (`.pdf`)
+- [ ] Visualizer query overlay (project live query vector + top-K hits onto 2D/3D scatter plot)
+
+### Future / Exploring
+- [ ] Local MCP Server integration for AI coding agents
+- [ ] Hybrid Search (dense + sparse/BM25 + RRF), Named Vectors & Reranking profiles
+- [ ] macOS & Linux platform implementations & multi-OS CI release builds
 
 ---
 
