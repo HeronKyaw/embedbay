@@ -8,9 +8,9 @@ use serde_json::{json, Value};
 use crate::adapters::{
     format_http_status_error, format_invalid_json_error, format_reqwest_error,
     http_client_for_url, AdapterError, BrowseRecordsRequest, BrowseRecordsResponse,
-    CollectionSchema, CollectionSummary, ConnectionTestResult, CreateCollectionRequest,
-    FilterCondition, FilterLogic, FilterSpec, PayloadFieldSchema, SearchRequest, SearchResponse,
-    VectorDbAdapter, VectorRecord,
+    CollectionIndexInfo, CollectionSchema, CollectionSummary, ConnectionTestResult,
+    CreateCollectionRequest, CreateIndexRequest, FilterCondition, FilterLogic, FilterSpec,
+    PayloadFieldSchema, SearchRequest, SearchResponse, VectorDbAdapter, VectorRecord,
 };
 
 pub struct QdrantAdapter {
@@ -556,6 +556,104 @@ impl VectorDbAdapter for QdrantAdapter {
             latency_ms,
         })
     }
+
+    async fn list_indexes(
+        &self,
+        collection: &str,
+    ) -> Result<Vec<CollectionIndexInfo>, AdapterError> {
+        let path = format!("/collections/{}", collection);
+        let resp = self.send_json(reqwest::Method::GET, &path, None).await?;
+        let mut out = Vec::new();
+        if let Some(obj) = resp
+            .pointer("/result/payload_schema")
+            .and_then(|v| v.as_object())
+        {
+            for (field, schema) in obj {
+                let index_type = schema
+                    .get("data_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("keyword")
+                    .to_string();
+                let params = schema
+                    .get("params")
+                    .cloned()
+                    .unwrap_or_else(|| json!({}));
+                let status = schema
+                    .get("points")
+                    .and_then(|v| v.as_u64())
+                    .map(|pts| format!("{} pts", pts));
+                out.push(CollectionIndexInfo {
+                    name: field.clone(),
+                    field_name: field.clone(),
+                    index_type,
+                    params,
+                    status,
+                });
+            }
+        }
+        out.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(out)
+    }
+
+    async fn create_index(
+        &self,
+        collection: &str,
+        req: CreateIndexRequest,
+    ) -> Result<(), AdapterError> {
+        let field = req.field_name.trim();
+        if field.is_empty() {
+            return Err(AdapterError::InvalidRequest(
+                "Field name cannot be empty".to_string(),
+            ));
+        }
+        let kind = req.index_type.trim().to_ascii_lowercase();
+        const ALLOWED: &[&str] = &[
+            "keyword", "integer", "float", "bool", "geo", "datetime", "text",
+        ];
+        if !ALLOWED.contains(&kind.as_str()) {
+            return Err(AdapterError::InvalidRequest(format!(
+                "Unsupported Qdrant payload index type '{}'",
+                req.index_type
+            )));
+        }
+
+        let field_schema = if let Some(obj) = req.params.as_object().filter(|o| !o.is_empty()) {
+            let mut merged = obj.clone();
+            merged.insert("type".to_string(), json!(kind));
+            Value::Object(merged)
+        } else {
+            json!(kind)
+        };
+
+        let path = format!("/collections/{}/index?wait=true", collection);
+        self.send_json(
+            reqwest::Method::PUT,
+            &path,
+            Some(json!({
+                "field_name": field,
+                "field_schema": field_schema,
+            })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn delete_index(
+        &self,
+        collection: &str,
+        index_name: &str,
+    ) -> Result<(), AdapterError> {
+        let field = index_name.trim();
+        if field.is_empty() {
+            return Err(AdapterError::InvalidRequest(
+                "Index field name cannot be empty".to_string(),
+            ));
+        }
+        let path = format!("/collections/{}/index/{}?wait=true", collection, field);
+        self.send_json(reqwest::Method::DELETE, &path, None)
+            .await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -702,6 +800,40 @@ mod tests {
             .await
             .expect("delete");
         assert_eq!(deleted, 1);
+
+        let indexes = adapter.list_indexes("docs").await.expect("list indexes");
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].field_name, "topic");
+        assert_eq!(indexes[0].index_type, "keyword");
+
+        adapter
+            .create_index(
+                "docs",
+                CreateIndexRequest {
+                    field_name: "year".to_string(),
+                    index_type: "integer".to_string(),
+                    params: json!({}),
+                },
+            )
+            .await
+            .expect("create index");
+
+        let bad_idx = adapter
+            .create_index(
+                "docs",
+                CreateIndexRequest {
+                    field_name: "x".to_string(),
+                    index_type: "invalid_kind".to_string(),
+                    params: json!({}),
+                },
+            )
+            .await;
+        assert!(bad_idx.is_err());
+
+        adapter
+            .delete_index("docs", "topic")
+            .await
+            .expect("delete index");
 
         server.abort();
     }

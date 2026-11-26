@@ -6,6 +6,7 @@ import type {
   InstalledEngine,
   StorageUsageSummary,
 } from "@/types/runtime";
+import type { VacuumResult } from "@/types/system";
 
 const PREVIEW_CATALOG: CatalogEngineView[] = [
   {
@@ -15,6 +16,10 @@ const PREVIEW_CATALOG: CatalogEngineView[] = [
       "High-performance vector similarity engine written in Rust with rich payload filtering and HNSW indexing.",
     tier: 1,
     embedded: false,
+    runtime_kind: "native",
+    ram_hint: "~50–200 MB",
+    category: "vector",
+    install_notice: null,
     default_port: 6333,
     default_grpc_port: 6334,
     versions: [
@@ -37,6 +42,10 @@ const PREVIEW_CATALOG: CatalogEngineView[] = [
       "Standalone Rust CLI server for Chroma local vector collections with zero Python or Docker dependencies.",
     tier: 1,
     embedded: false,
+    runtime_kind: "native",
+    ram_hint: "~50–150 MB",
+    category: "vector",
+    install_notice: null,
     default_port: 8000,
     default_grpc_port: null,
     versions: [
@@ -90,6 +99,8 @@ export async function getStorageUsage(): Promise<StorageUsageSummary> {
       unused_engine_bytes: 0,
       unused_engine_count: 0,
       total_instance_bytes: 0,
+      db_bytes: 0,
+      logs_bytes: 0,
       engines: [],
       instances: [],
     };
@@ -107,4 +118,11 @@ export async function cleanupUnusedEngines(): Promise<CleanupResult> {
     };
   }
   return invoke<CleanupResult>("cleanup_unused_engines");
+}
+
+export async function compactDatabase(): Promise<VacuumResult> {
+  if (!isTauriRuntime()) {
+    return { before_bytes: 0, after_bytes: 0, freed_bytes: 0 };
+  }
+  return invoke<VacuumResult>("compact_database");
 }

@@ -27,7 +27,6 @@ use crate::supervisor::EventSink;
 
 const MAX_BACKOFF_RESTARTS: u32 = 5;
 const GRACEFUL_STOP_TIMEOUT_SECS: u64 = 10;
-const HEALTH_POLL_TIMEOUT_SECS: u64 = 30;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BatchActionResult {
@@ -390,7 +389,10 @@ impl ProcessManager {
         self.emit_status_changed(&instance.id, InstanceStatus::Starting, pid, None);
 
         // Wait for health endpoint / TCP readiness while checking early exit
-        let health_res = self.wait_for_health(&instance.id, &spec.health).await;
+        let startup_timeout = provider.startup_timeout_secs();
+        let health_res = self
+            .wait_for_health(&instance.id, &spec.health, startup_timeout)
+            .await;
         if let Err(err_msg) = health_res {
             self.logs.append(
                 &instance.id,
@@ -467,6 +469,7 @@ impl ProcessManager {
         &self,
         instance_id: &str,
         health: &HealthCheckKind,
+        timeout_secs: u64,
     ) -> Result<(), String> {
         if matches!(health, HealthCheckKind::None) {
             return Ok(());
@@ -478,7 +481,7 @@ impl ProcessManager {
             .build()
             .map_err(|e| e.to_string())?;
 
-        let deadline = Instant::now() + Duration::from_secs(HEALTH_POLL_TIMEOUT_SECS);
+        let deadline = Instant::now() + Duration::from_secs(timeout_secs.max(1));
         loop {
             // Abort fast if child already exited or stop was requested
             {
@@ -535,7 +538,7 @@ impl ProcessManager {
             if Instant::now() >= deadline {
                 return Err(format!(
                     "Timed out after {}s waiting for health check",
-                    HEALTH_POLL_TIMEOUT_SECS
+                    timeout_secs.max(1)
                 ));
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
@@ -729,9 +732,12 @@ impl ProcessManager {
                     instance_id,
                     &log_dir,
                     "system",
-                    "Graceful stop timed out after 10s; force killing process.",
+                    "Graceful stop timed out after 10s; force killing process tree.",
                     sink_opt.as_deref(),
                 );
+                if let Some(pid) = pid_opt {
+                    let _ = platform::force_kill_process_tree(pid);
+                }
                 let _ = child.kill().await;
             }
         }
@@ -762,16 +768,19 @@ impl ProcessManager {
         let log_dir = self.log_dir_for(instance_id);
         let sink_opt = self.sink();
 
-        let child_opt = {
+        let (child_opt, pid_opt) = {
             let mut guard = self.runtimes.lock().await;
             let Some(rt) = guard.get_mut(instance_id) else {
                 return Ok(());
             };
             rt.desired_running = false;
             rt.status = InstanceStatus::Stopping;
-            rt.child.take()
+            (rt.child.take(), rt.pid)
         };
 
+        if let Some(pid) = pid_opt {
+            let _ = platform::force_kill_process_tree(pid);
+        }
         if let Some(mut child) = child_opt {
             let _ = child.kill().await;
         }
@@ -1024,20 +1033,33 @@ impl ProcessManager {
                 };
 
                 if !pids.is_empty() {
-                    let raw_pids: Vec<Pid> = pids.iter().map(|(_, p)| *p).collect();
                     sys.refresh_processes_specifics(
-                        ProcessesToUpdate::Some(&raw_pids),
+                        ProcessesToUpdate::All,
                         true,
                         ProcessRefreshKind::nothing().with_cpu().with_memory(),
                     );
 
+                    let mut children_map: HashMap<u32, Vec<u32>> = HashMap::new();
+                    let mut stats_map: HashMap<u32, (u64, f32)> = HashMap::new();
+                    for (proc_pid, proc_info) in sys.processes() {
+                        let pid_u32 = proc_pid.as_u32();
+                        stats_map.insert(pid_u32, (proc_info.memory(), proc_info.cpu_usage()));
+                        if let Some(parent_pid) = proc_info.parent() {
+                            children_map
+                                .entry(parent_pid.as_u32())
+                                .or_default()
+                                .push(pid_u32);
+                        }
+                    }
+
                     let core_divisor = cpu_cores.max(1) as f32;
                     let mut guard = pm_metrics.runtimes.lock().await;
                     for (id, pid) in &pids {
-                        if let (Some(rt), Some(proc_info)) = (guard.get_mut(id), sys.process(*pid))
-                        {
-                            rt.ram_bytes = proc_info.memory();
-                            let normalized_cpu = proc_info.cpu_usage() / core_divisor;
+                        if let Some(rt) = guard.get_mut(id) {
+                            let (ram_bytes, raw_cpu) =
+                                sum_process_tree_metrics(pid.as_u32(), &children_map, &stats_map);
+                            rt.ram_bytes = ram_bytes;
+                            let normalized_cpu = raw_cpu / core_divisor;
                             rt.cpu_percent = if normalized_cpu.is_finite() {
                                 normalized_cpu.clamp(0.0, 100.0)
                             } else {
@@ -1062,6 +1084,38 @@ impl ProcessManager {
             }
         });
     }
+}
+
+fn sum_process_tree_metrics(
+    root_pid: u32,
+    children_map: &HashMap<u32, Vec<u32>>,
+    stats_map: &HashMap<u32, (u64, f32)>,
+) -> (u64, f32) {
+    let mut visited = HashSet::new();
+    let mut stack = vec![root_pid];
+    let mut total_ram = 0u64;
+    let mut total_cpu = 0.0f32;
+
+    while let Some(pid) = stack.pop() {
+        if !visited.insert(pid) {
+            continue;
+        }
+        if let Some((ram, cpu)) = stats_map.get(&pid) {
+            total_ram = total_ram.saturating_add(*ram);
+            if cpu.is_finite() {
+                total_cpu += *cpu;
+            }
+        }
+        if let Some(children) = children_map.get(&pid) {
+            for &child in children {
+                if !visited.contains(&child) {
+                    stack.push(child);
+                }
+            }
+        }
+    }
+
+    (total_ram, total_cpu)
 }
 
 fn build_metrics(inst: &InstanceRecord, rt: &ManagedRuntime) -> InstanceMetrics {
@@ -1213,5 +1267,24 @@ mod tests {
         assert!(results[0].ok);
         assert!(!pm.is_instance_running(&inst_idle.id).await);
         assert!(pm.is_instance_running(&inst_active.id).await);
+    }
+
+    #[test]
+    fn sums_ram_and_cpu_across_process_tree_without_cycles() {
+        let mut children_map: HashMap<u32, Vec<u32>> = HashMap::new();
+        children_map.insert(100, vec![101, 102]);
+        children_map.insert(101, vec![103]);
+        children_map.insert(200, vec![201]);
+
+        let mut stats_map: HashMap<u32, (u64, f32)> = HashMap::new();
+        stats_map.insert(100, (10_000, 1.5));
+        stats_map.insert(101, (20_000, 2.0));
+        stats_map.insert(102, (30_000, 0.5));
+        stats_map.insert(103, (500_000, 12.0));
+        stats_map.insert(200, (999_999, 50.0));
+
+        let (ram, cpu) = sum_process_tree_metrics(100, &children_map, &stats_map);
+        assert_eq!(ram, 560_000);
+        assert!((cpu - 16.0).abs() < 0.001);
     }
 }

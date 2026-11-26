@@ -1,5 +1,7 @@
 export type ArchiveType = "zip" | "tar_gz" | "binary";
 
+export type EngineRuntimeKind = "native" | "embedded" | "sql_portable" | "jvm";
+
 export type InstanceStatus =
   | "stopped"
   | "starting"
@@ -24,6 +26,10 @@ export interface CatalogEngineView {
   description: string;
   tier: number;
   embedded: boolean;
+  runtime_kind?: EngineRuntimeKind;
+  ram_hint?: string | null;
+  category?: string | null;
+  install_notice?: string | null;
   default_port: number;
   default_grpc_port: number | null;
   versions: CatalogVersionView[];
@@ -205,6 +211,8 @@ export interface StorageUsageSummary {
   unused_engine_bytes: number;
   unused_engine_count: number;
   total_instance_bytes: number;
+  db_bytes: number;
+  logs_bytes: number;
   engines: InstalledEngineStorage[];
   instances: InstanceStorage[];
 }

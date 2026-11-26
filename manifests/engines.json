@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-25T18:45:00Z",
+  "updated_at": "2026-11-26T06:55:23Z",
   "engines": [
     {
       "engine_type": "qdrant",
@@ -8,6 +8,10 @@
       "description": "High-performance vector similarity engine written in Rust with rich payload filtering and HNSW indexing.",
       "tier": 1,
       "embedded": false,
+      "runtime_kind": "native",
+      "ram_hint": "~50–200 MB",
+      "category": "vector",
+      "install_notice": null,
       "default_port": 6333,
       "default_grpc_port": 6334,
       "versions": [
@@ -47,6 +51,10 @@
       "description": "Standalone Rust CLI server for Chroma local vector collections with zero Python or Docker dependencies.",
       "tier": 1,
       "embedded": false,
+      "runtime_kind": "native",
+      "ram_hint": "~50–150 MB",
+      "category": "vector",
+      "install_notice": null,
       "default_port": 8000,
       "default_grpc_port": null,
       "versions": [
@@ -86,6 +94,10 @@
       "description": "Portable PostgreSQL 17 server paired with native pgvector (vector.dll) for SQL + HNSW/IVFFlat vector search.",
       "tier": 1,
       "embedded": false,
+      "runtime_kind": "sql_portable",
+      "ram_hint": "~80–250 MB",
+      "category": "sql_vector",
+      "install_notice": null,
       "default_port": 5432,
       "default_grpc_port": null,
       "versions": [
@@ -119,6 +131,10 @@
       "description": "Zero-daemon columnar vector store opening local .lance directories directly with 0 MB background RAM.",
       "tier": 1,
       "embedded": true,
+      "runtime_kind": "embedded",
+      "ram_hint": "0 MB idle",
+      "category": "embedded",
+      "install_notice": null,
       "default_port": 0,
       "default_grpc_port": null,
       "versions": [
@@ -132,6 +148,209 @@
               "size_bytes": 0,
               "archive_type": "binary",
               "binary_rel_path": "embedded",
+              "extra_archives": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "engine_type": "meilisearch",
+      "display_name": "Meilisearch",
+      "description": "Lightweight single-binary Rust search engine with hybrid keyword + userProvided HNSW vector search.",
+      "tier": 1,
+      "embedded": false,
+      "runtime_kind": "native",
+      "ram_hint": "~40–150 MB",
+      "category": "hybrid_search",
+      "install_notice": null,
+      "default_port": 7700,
+      "default_grpc_port": null,
+      "versions": [
+        {
+          "version": "1.58.0",
+          "recommended": true,
+          "targets": {
+            "x86_64-pc-windows-msvc": {
+              "url": "https://github.com/meilisearch/meilisearch/releases/download/v1.58.0/meilisearch-windows-amd64.exe",
+              "sha256": "9199197db4a260ca079296de89364a1e2e725703dcefc44340c36f62d3bcf8fe",
+              "size_bytes": 353333248,
+              "archive_type": "binary",
+              "binary_rel_path": "meilisearch.exe",
+              "extra_archives": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "engine_type": "surrealdb",
+      "display_name": "SurrealDB",
+      "description": "Multi-model Rust database (document, graph, and HNSW vector indexes) backed by embedded SurrealKV storage.",
+      "tier": 1,
+      "embedded": false,
+      "runtime_kind": "native",
+      "ram_hint": "~40–150 MB",
+      "category": "multimodel",
+      "install_notice": null,
+      "default_port": 8008,
+      "default_grpc_port": null,
+      "versions": [
+        {
+          "version": "4.0.1",
+          "recommended": true,
+          "targets": {
+            "x86_64-pc-windows-msvc": {
+              "url": "https://github.com/surrealdb/surrealdb/releases/download/v4.0.1/surreal-v4.0.1.windows-amd64.exe",
+              "sha256": "150cf2138b0064dc85825b443e5a87d3bf9338a0e085d01fe09a00466576d595",
+              "size_bytes": 286978048,
+              "archive_type": "binary",
+              "binary_rel_path": "surreal.exe",
+              "extra_archives": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "engine_type": "sqlite_vec",
+      "display_name": "SQLite + sqlite-vec",
+      "description": "Built-in zero-daemon SQLite vec0 virtual tables for local-first transactional vector search (0 MB idle RAM).",
+      "tier": 1,
+      "embedded": true,
+      "runtime_kind": "embedded",
+      "ram_hint": "0 MB idle",
+      "category": "embedded",
+      "install_notice": null,
+      "default_port": 0,
+      "default_grpc_port": null,
+      "versions": [
+        {
+          "version": "embedded-1.0",
+          "recommended": true,
+          "targets": {
+            "universal": {
+              "url": "embedded://local",
+              "sha256": "embedded",
+              "size_bytes": 0,
+              "archive_type": "binary",
+              "binary_rel_path": "embedded",
+              "extra_archives": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "engine_type": "elasticsearch",
+      "display_name": "Elasticsearch",
+      "description": "Enterprise full-text + dense_vector HNSW search engine packaged with a bundled OpenJDK runtime.",
+      "tier": 1,
+      "embedded": false,
+      "runtime_kind": "jvm",
+      "ram_hint": "~1 GB JVM heap",
+      "category": "hybrid_search",
+      "install_notice": "Includes bundled OpenJDK (~643 MB download). Defaults to a 1 GB JVM heap (-Xmx1024m) and takes 20–60s on first start. Adjust heap_mb in instance Config JSON if needed.",
+      "default_port": 9200,
+      "default_grpc_port": null,
+      "versions": [
+        {
+          "version": "9.5.7",
+          "recommended": true,
+          "targets": {
+            "x86_64-pc-windows-msvc": {
+              "url": "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-9.5.7-windows-x86_64.zip",
+              "sha256": "0859d39ef51dce801cbabd9b02a1ae3daa0cce72ba407e2979b234d0b5ea9de9",
+              "size_bytes": 674610902,
+              "archive_type": "zip",
+              "binary_rel_path": "bin/elasticsearch.bat",
+              "extra_archives": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "engine_type": "opensearch",
+      "display_name": "OpenSearch",
+      "description": "Apache-2.0 enterprise search & k-NN Lucene HNSW vector engine with a bundled OpenJDK runtime.",
+      "tier": 1,
+      "embedded": false,
+      "runtime_kind": "jvm",
+      "ram_hint": "~1 GB JVM heap",
+      "category": "hybrid_search",
+      "install_notice": "Includes bundled OpenJDK (~1.0 GB download). Defaults to a 1 GB JVM heap (-Xmx1024m) and takes 20–60s on first start. Adjust heap_mb in instance Config JSON if needed.",
+      "default_port": 9201,
+      "default_grpc_port": null,
+      "versions": [
+        {
+          "version": "3.10.1",
+          "recommended": true,
+          "targets": {
+            "x86_64-pc-windows-msvc": {
+              "url": "https://artifacts.opensearch.org/releases/bundle/opensearch/3.10.1/opensearch-3.10.1-windows-x64.zip",
+              "sha256": "3303c33f1d750120228ee3acf985703008dead5cdc2ded285f3e9a3428f08c0d",
+              "size_bytes": 1050573848,
+              "archive_type": "zip",
+              "binary_rel_path": "bin/opensearch.bat",
+              "extra_archives": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "engine_type": "mariadb",
+      "display_name": "MariaDB 11.8 Vector",
+      "description": "Portable MariaDB LTS relational server with native VECTOR(N) columns, VEC_DISTANCE_COSINE, and HNSW indexes.",
+      "tier": 1,
+      "embedded": false,
+      "runtime_kind": "sql_portable",
+      "ram_hint": "~80–200 MB",
+      "category": "sql_vector",
+      "install_notice": null,
+      "default_port": 3306,
+      "default_grpc_port": null,
+      "versions": [
+        {
+          "version": "11.8.10",
+          "recommended": true,
+          "targets": {
+            "x86_64-pc-windows-msvc": {
+              "url": "http://downloads.mariadb.org/rest-api/mariadb/11.8.10/mariadb-11.8.10-winx64.zip",
+              "sha256": "05d04b46763ea3dc9111bfc82dc061e0a158c682a73d31ba34b13f2653c88d17",
+              "size_bytes": 99027722,
+              "archive_type": "zip",
+              "binary_rel_path": "bin/mariadbd.exe",
+              "extra_archives": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "engine_type": "duckdb",
+      "display_name": "DuckDB + vss",
+      "description": "On-demand zero-daemon analytical vector engine using official duckdb.exe CLI (0 MB idle RAM, real .duckdb files).",
+      "tier": 1,
+      "embedded": true,
+      "runtime_kind": "embedded",
+      "ram_hint": "0 MB idle",
+      "category": "embedded",
+      "install_notice": null,
+      "default_port": 0,
+      "default_grpc_port": null,
+      "versions": [
+        {
+          "version": "2.0.1",
+          "recommended": true,
+          "targets": {
+            "x86_64-pc-windows-msvc": {
+              "url": "https://github.com/duckdb/duckdb/releases/download/v2.0.1/duckdb-cli-windows-amd64.zip",
+              "sha256": "9df372514a06e9edbdca294cc43fdfbfc4e80799c8292d0964239cfcbb8718cf",
+              "size_bytes": 19890817,
+              "archive_type": "zip",
+              "binary_rel_path": "duckdb.exe",
               "extra_archives": []
             }
           }

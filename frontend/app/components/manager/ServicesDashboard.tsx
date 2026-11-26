@@ -4,6 +4,7 @@ import {
   Archive,
   ArchiveRestore,
   Boxes,
+  Code2,
   Database,
   Moon,
   Pencil,
@@ -17,6 +18,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { SnippetModal } from "@/components/explorer/SnippetModal";
 import { LogViewer } from "@/components/manager/LogViewer";
 import { ResourceMeters } from "@/components/manager/ResourceMeters";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +37,7 @@ import {
   updateInstance,
 } from "@/ipc/instances";
 import { formatBytes, formatRamMb } from "@/lib/format";
+import { generateConnectionSnippets } from "@/lib/snippets";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/useAppStore";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
@@ -72,6 +75,23 @@ export function ServicesDashboard({
   const [deleteTarget, setDeleteTarget] =
     React.useState<InstanceRecord | null>(null);
   const [deleteDataFlag, setDeleteDataFlag] = React.useState(false);
+  const [snippetInstance, setSnippetInstance] =
+    React.useState<InstanceRecord | null>(null);
+
+  const snippetInstanceSnippets = React.useMemo(
+    () =>
+      snippetInstance
+        ? generateConnectionSnippets({
+            name: snippetInstance.name,
+            engineType: snippetInstance.engine_type,
+            host: snippetInstance.host,
+            port: snippetInstance.port,
+            dataDir: snippetInstance.data_dir,
+            hasAuth: false,
+          })
+        : [],
+    [snippetInstance],
+  );
 
   const totalDiskBytes = Object.values(metrics).reduce(
     (acc, m) => acc + (m.disk_bytes ?? 0),
@@ -455,6 +475,15 @@ export function ServicesDashboard({
                   </div>
 
                   <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      title="Copy Connection Snippet"
+                      onClick={() => setSnippetInstance(inst)}
+                    >
+                      <Code2 className="h-3.5 w-3.5" />
+                    </Button>
                     {!isEmbedded && (
                       <Button
                         type="button"
@@ -648,6 +677,15 @@ export function ServicesDashboard({
             );
           })()}
       </Dialog>
+
+      <SnippetModal
+        open={Boolean(snippetInstance)}
+        onOpenChange={(next) => {
+          if (!next) setSnippetInstance(null);
+        }}
+        title={`Connect to ${snippetInstance?.name ?? "Instance"}`}
+        snippets={snippetInstanceSnippets}
+      />
     </div>
   );
 }

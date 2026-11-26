@@ -1,9 +1,16 @@
 pub mod chroma;
+pub mod duckdb;
+pub mod elasticsearch;
 pub mod installer;
 pub mod lancedb;
 pub mod manifest;
+pub mod mariadb;
+pub mod meilisearch;
+pub mod opensearch;
 pub mod pgvector;
 pub mod qdrant;
+pub mod sqlite_vec;
+pub mod surrealdb;
 
 use std::path::{Path, PathBuf};
 
@@ -55,6 +62,12 @@ pub trait EngineProvider: Send + Sync {
     fn is_embedded(&self) -> bool {
         false
     }
+    fn uses_installed_binary(&self) -> bool {
+        !self.is_embedded()
+    }
+    fn startup_timeout_secs(&self) -> u64 {
+        30
+    }
 
     fn prepare_instance(
         &self,
@@ -94,6 +107,13 @@ pub fn get_provider(engine_type: &str) -> Result<Box<dyn EngineProvider>, Engine
         "chroma" => Ok(Box::new(chroma::ChromaProvider)),
         "pgvector" => Ok(Box::new(pgvector::PgVectorProvider)),
         "lancedb" => Ok(Box::new(lancedb::LanceDbProvider)),
+        "elasticsearch" => Ok(Box::new(elasticsearch::ElasticsearchProvider)),
+        "meilisearch" => Ok(Box::new(meilisearch::MeilisearchProvider)),
+        "surrealdb" => Ok(Box::new(surrealdb::SurrealDbProvider)),
+        "sqlite_vec" => Ok(Box::new(sqlite_vec::SqliteVecProvider)),
+        "opensearch" => Ok(Box::new(opensearch::OpenSearchProvider)),
+        "mariadb" => Ok(Box::new(mariadb::MariaDbProvider)),
+        "duckdb" => Ok(Box::new(duckdb::DuckDbProvider)),
         other => Err(EngineError::UnsupportedEngine(other.to_string())),
     }
 }

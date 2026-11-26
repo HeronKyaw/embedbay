@@ -46,6 +46,10 @@ pub struct EngineVersionEntry {
     pub targets: HashMap<String, EngineTargetArtifact>,
 }
 
+fn default_runtime_kind() -> String {
+    "native".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EngineCatalogEntry {
     pub engine_type: String,
@@ -54,6 +58,14 @@ pub struct EngineCatalogEntry {
     pub tier: u8,
     #[serde(default)]
     pub embedded: bool,
+    #[serde(default = "default_runtime_kind")]
+    pub runtime_kind: String,
+    #[serde(default)]
+    pub ram_hint: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub install_notice: Option<String>,
     pub default_port: u16,
     #[serde(default)]
     pub default_grpc_port: Option<u16>,
@@ -85,9 +97,21 @@ pub struct CatalogEngineView {
     pub description: String,
     pub tier: u8,
     pub embedded: bool,
+    pub runtime_kind: String,
+    pub ram_hint: Option<String>,
+    pub category: Option<String>,
+    pub install_notice: Option<String>,
     pub default_port: u16,
     pub default_grpc_port: Option<u16>,
     pub versions: Vec<CatalogVersionView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ManifestDiagnostics {
+    pub path: String,
+    pub schema_version: u32,
+    pub updated_at: String,
+    pub engine_count: usize,
 }
 
 pub struct ManifestService {
@@ -131,6 +155,19 @@ impl ManifestService {
 
     pub fn manifest_path(&self) -> &Path {
         &self.manifest_path
+    }
+
+    pub fn diagnostics_info(&self) -> Result<ManifestDiagnostics, String> {
+        let guard = self
+            .manifest
+            .read()
+            .map_err(|_| "Manifest lock poisoned".to_string())?;
+        Ok(ManifestDiagnostics {
+            path: self.manifest_path.to_string_lossy().into_owned(),
+            schema_version: guard.schema_version,
+            updated_at: guard.updated_at.clone(),
+            engine_count: guard.engines.len(),
+        })
     }
 
     pub fn find_artifact(
@@ -224,6 +261,10 @@ impl ManifestService {
                     description: engine.description.clone(),
                     tier: engine.tier,
                     embedded: engine.embedded,
+                    runtime_kind: engine.runtime_kind.clone(),
+                    ram_hint: engine.ram_hint.clone(),
+                    category: engine.category.clone(),
+                    install_notice: engine.install_notice.clone(),
                     default_port: engine.default_port,
                     default_grpc_port: engine.default_grpc_port,
                     versions,
@@ -269,5 +310,40 @@ mod tests {
         assert!(!chroma.versions.is_empty());
         assert!(qdrant.versions[0].sha256.len() == 64);
         assert!(chroma.versions[0].sha256.len() == 64);
+
+        for expected in [
+            "qdrant",
+            "chroma",
+            "pgvector",
+            "lancedb",
+            "elasticsearch",
+            "meilisearch",
+            "surrealdb",
+            "sqlite_vec",
+            "opensearch",
+            "mariadb",
+            "duckdb",
+        ] {
+            let entry = catalog
+                .iter()
+                .find(|e| e.engine_type == expected)
+                .unwrap_or_else(|| panic!("missing engine '{}' in Windows catalog", expected));
+            assert!(!entry.versions.is_empty());
+            assert!(matches!(
+                entry.runtime_kind.as_str(),
+                "native" | "embedded" | "sql_portable" | "jvm"
+            ));
+        }
+
+        let es = catalog
+            .iter()
+            .find(|e| e.engine_type == "elasticsearch")
+            .expect("es");
+        let os = catalog
+            .iter()
+            .find(|e| e.engine_type == "opensearch")
+            .expect("os");
+        assert!(es.install_notice.is_some());
+        assert!(os.install_notice.is_some());
     }
 }

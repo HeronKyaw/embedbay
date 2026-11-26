@@ -74,8 +74,8 @@ pub async fn install_engine(
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
 
-    // Embedded engines (such as LanceDB in Phase 4) require zero download.
-    if catalog_entry.embedded || artifact.url == "embedded://local" {
+    // Built-in zero-download embedded engines (such as LanceDB and SQLite-vec) require zero download.
+    if artifact.url == "embedded://local" {
         emit_progress(
             sink,
             InstallProgressEvent {
@@ -562,6 +562,10 @@ mod tests {
                     description: "Test".to_string(),
                     tier: 1,
                     embedded: false,
+                    runtime_kind: "native".to_string(),
+                    ram_hint: None,
+                    category: None,
+                    install_notice: None,
                     default_port: 6333,
                     default_grpc_port: Some(6334),
                     versions: vec![EngineVersionEntry {
@@ -621,6 +625,10 @@ mod tests {
                     description: "Test".to_string(),
                     tier: 1,
                     embedded: false,
+                    runtime_kind: "native".to_string(),
+                    ram_hint: None,
+                    category: None,
+                    install_notice: None,
                     default_port: 6333,
                     default_grpc_port: Some(6334),
                     versions: vec![EngineVersionEntry {
@@ -678,5 +686,21 @@ mod tests {
             fs::read(dest.join("bin").join("chroma")).expect("read extracted"),
             b"hello chroma"
         );
+    }
+
+    #[test]
+    fn resolve_extracted_binary_finds_nested_archive_root() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let nested_bin = dir
+            .path()
+            .join("elasticsearch-9.5.6")
+            .join("bin")
+            .join("elasticsearch.bat");
+        fs::create_dir_all(nested_bin.parent().expect("parent")).expect("mkdir");
+        fs::write(&nested_bin, b"@echo off\n").expect("write bat");
+
+        let resolved =
+            resolve_extracted_binary(dir.path(), "bin/elasticsearch.bat").expect("resolve");
+        assert_eq!(resolved, nested_bin);
     }
 }

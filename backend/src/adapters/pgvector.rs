@@ -8,9 +8,9 @@ use tokio_postgres_rustls::MakeRustlsConnect;
 
 use crate::adapters::{
     format_connection_error, AdapterError, BrowseRecordsRequest, BrowseRecordsResponse,
-    CollectionSchema, CollectionSummary, ConnectionTestResult, CreateCollectionRequest,
-    FilterCondition, FilterLogic, FilterSpec, PayloadFieldSchema, SearchRequest, SearchResponse,
-    VectorDbAdapter, VectorRecord,
+    CollectionIndexInfo, CollectionSchema, CollectionSummary, ConnectionTestResult,
+    CreateCollectionRequest, CreateIndexRequest, FilterCondition, FilterLogic, FilterSpec,
+    PayloadFieldSchema, SearchRequest, SearchResponse, VectorDbAdapter, VectorRecord,
 };
 
 pub struct PgVectorAdapter {
@@ -39,6 +39,171 @@ pub fn sanitize_pg_identifier(name: &str) -> Result<String, AdapterError> {
         )));
     }
     Ok(trimmed.to_string())
+}
+
+fn map_pg_ops_class(raw: Option<&str>) -> Result<&'static str, AdapterError> {
+    match raw.map(str::trim).unwrap_or("vector_cosine_ops") {
+        "" | "cosine" | "vector_cosine_ops" => Ok("vector_cosine_ops"),
+        "l2" | "euclidean" | "vector_l2_ops" => Ok("vector_l2_ops"),
+        "ip" | "dot" | "inner_product" | "vector_ip_ops" => Ok("vector_ip_ops"),
+        other => Err(AdapterError::InvalidRequest(format!(
+            "Unsupported pgvector ops class '{}'",
+            other
+        ))),
+    }
+}
+
+pub fn build_pg_create_index_sql(
+    collection: &str,
+    req: &CreateIndexRequest,
+) -> Result<String, AdapterError> {
+    let table = sanitize_pg_identifier(collection)?;
+    let col_raw = if req.field_name.trim().is_empty() {
+        "embedding"
+    } else {
+        req.field_name.trim()
+    };
+    let col = sanitize_pg_identifier(col_raw)?;
+    let method = match req.index_type.trim().to_ascii_lowercase().as_str() {
+        "hnsw" => "hnsw",
+        "ivfflat" => "ivfflat",
+        other => {
+            return Err(AdapterError::InvalidRequest(format!(
+                "Unsupported pgvector index type '{}' (expected 'hnsw' or 'ivfflat')",
+                other
+            )));
+        }
+    };
+
+    let ops = map_pg_ops_class(
+        req.params
+            .get("ops")
+            .or_else(|| req.params.get("distance_metric"))
+            .and_then(|v| v.as_str()),
+    )?;
+
+    let custom_name = req
+        .params
+        .get("name")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let index_name = match custom_name {
+        Some(n) => sanitize_pg_identifier(n)?,
+        None => {
+            let mut candidate = format!("{}_{}_{}_idx", table, col, method);
+            if candidate.len() > 63 {
+                candidate.truncate(63);
+            }
+            sanitize_pg_identifier(&candidate)?
+        }
+    };
+
+    let mut with_opts = Vec::new();
+    if method == "hnsw" {
+        if let Some(m) = req.params.get("m").and_then(|v| v.as_u64()) {
+            if !(2..=128).contains(&m) {
+                return Err(AdapterError::InvalidRequest(
+                    "HNSW parameter 'm' must be between 2 and 128".to_string(),
+                ));
+            }
+            with_opts.push(format!("m = {}", m));
+        }
+        if let Some(ef) = req.params.get("ef_construction").and_then(|v| v.as_u64()) {
+            if !(4..=1000).contains(&ef) {
+                return Err(AdapterError::InvalidRequest(
+                    "HNSW parameter 'ef_construction' must be between 4 and 1000".to_string(),
+                ));
+            }
+            with_opts.push(format!("ef_construction = {}", ef));
+        }
+    } else if let Some(lists) = req.params.get("lists").and_then(|v| v.as_u64()) {
+        if !(1..=65536).contains(&lists) {
+            return Err(AdapterError::InvalidRequest(
+                "IVFFlat parameter 'lists' must be between 1 and 65536".to_string(),
+            ));
+        }
+        with_opts.push(format!("lists = {}", lists));
+    }
+
+    let with_clause = if with_opts.is_empty() {
+        String::new()
+    } else {
+        format!(" WITH ({})", with_opts.join(", "))
+    };
+
+    Ok(format!(
+        "CREATE INDEX \"{index_name}\" ON \"{table}\" USING {method} (\"{col}\" {ops}){with_clause};"
+    ))
+}
+
+pub fn build_pg_drop_index_sql(index_name: &str) -> Result<String, AdapterError> {
+    let idx = sanitize_pg_identifier(index_name)?;
+    Ok(format!("DROP INDEX IF EXISTS \"public\".\"{}\";", idx))
+}
+
+pub fn parse_pg_index_row(indexname: &str, indexdef: &str) -> CollectionIndexInfo {
+    let lower = indexdef.to_ascii_lowercase();
+    let index_type = if lower.contains(" using hnsw ") {
+        "hnsw"
+    } else if lower.contains(" using ivfflat ") {
+        "ivfflat"
+    } else if lower.contains(" using gin ") {
+        "gin"
+    } else if lower.contains(" using gist ") {
+        "gist"
+    } else {
+        "btree"
+    }
+    .to_string();
+
+    let field_name = if let Some(start) = indexdef.find('(') {
+        if let Some(rel_end) = indexdef[start + 1..].find(')') {
+            let inner = indexdef[start + 1..start + 1 + rel_end].trim();
+            inner
+                .split_whitespace()
+                .next()
+                .unwrap_or(inner)
+                .trim_matches('"')
+                .to_string()
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
+    let mut params = serde_json::Map::new();
+    for ops in ["vector_cosine_ops", "vector_l2_ops", "vector_ip_ops"] {
+        if lower.contains(ops) {
+            params.insert("ops".to_string(), json!(ops));
+            break;
+        }
+    }
+    if let Some(with_pos) = lower.find(" with (") {
+        if let Some(end_rel) = lower[with_pos + 7..].find(')') {
+            let raw_with = &lower[with_pos + 7..with_pos + 7 + end_rel];
+            for part in raw_with.split(',') {
+                if let Some((k, v)) = part.split_once('=') {
+                    let key = k.trim().to_string();
+                    let val_str = v.trim();
+                    if let Ok(num) = val_str.parse::<u64>() {
+                        params.insert(key, json!(num));
+                    } else {
+                        params.insert(key, json!(val_str));
+                    }
+                }
+            }
+        }
+    }
+
+    CollectionIndexInfo {
+        name: indexname.to_string(),
+        field_name,
+        index_type,
+        params: Value::Object(params),
+        status: Some("active".to_string()),
+    }
 }
 
 pub fn format_pg_vector_literal(vec: &[f32]) -> String {
@@ -699,6 +864,61 @@ impl VectorDbAdapter for PgVectorAdapter {
             latency_ms,
         })
     }
+
+    async fn list_indexes(
+        &self,
+        collection: &str,
+    ) -> Result<Vec<CollectionIndexInfo>, AdapterError> {
+        let table = sanitize_pg_identifier(collection)?;
+        let client = self.connect().await?;
+        let rows = client
+            .query(
+                "SELECT indexname, indexdef
+                 FROM pg_indexes
+                 WHERE schemaname = 'public' AND tablename = $1
+                 ORDER BY indexname ASC",
+                &[&table],
+            )
+            .await
+            .map_err(|e| AdapterError::Api(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                let name: String = r.get(0);
+                let def: String = r.get(1);
+                parse_pg_index_row(&name, &def)
+            })
+            .collect())
+    }
+
+    async fn create_index(
+        &self,
+        collection: &str,
+        req: CreateIndexRequest,
+    ) -> Result<(), AdapterError> {
+        let sql = build_pg_create_index_sql(collection, &req)?;
+        let client = self.connect().await?;
+        client
+            .batch_execute(&sql)
+            .await
+            .map_err(|e| AdapterError::Api(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn delete_index(
+        &self,
+        _collection: &str,
+        index_name: &str,
+    ) -> Result<(), AdapterError> {
+        let sql = build_pg_drop_index_sql(index_name)?;
+        let client = self.connect().await?;
+        client
+            .batch_execute(&sql)
+            .await
+            .map_err(|e| AdapterError::Api(e.to_string()))?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -740,5 +960,79 @@ mod tests {
         assert!(where_sql.contains("metadata->>'topic' = $1"));
         assert!(where_sql.contains("(metadata->>'year')::double precision >= $2"));
         assert_eq!(params, vec!["rust", "2024"]);
+    }
+
+    #[test]
+    fn generates_validated_pgvector_index_ddl_and_parses_pg_indexes() {
+        let hnsw_sql = build_pg_create_index_sql(
+            "docs",
+            &CreateIndexRequest {
+                field_name: "embedding".to_string(),
+                index_type: "hnsw".to_string(),
+                params: json!({
+                    "ops": "vector_cosine_ops",
+                    "m": 16,
+                    "ef_construction": 64
+                }),
+            },
+        )
+        .expect("hnsw ddl");
+        assert_eq!(
+            hnsw_sql,
+            "CREATE INDEX \"docs_embedding_hnsw_idx\" ON \"docs\" USING hnsw (\"embedding\" vector_cosine_ops) WITH (m = 16, ef_construction = 64);"
+        );
+
+        let ivf_sql = build_pg_create_index_sql(
+            "docs",
+            &CreateIndexRequest {
+                field_name: "embedding".to_string(),
+                index_type: "ivfflat".to_string(),
+                params: json!({
+                    "name": "custom_ivf_idx",
+                    "ops": "euclidean",
+                    "lists": 200
+                }),
+            },
+        )
+        .expect("ivfflat ddl");
+        assert_eq!(
+            ivf_sql,
+            "CREATE INDEX \"custom_ivf_idx\" ON \"docs\" USING ivfflat (\"embedding\" vector_l2_ops) WITH (lists = 200);"
+        );
+
+        // Reject unsafe identifiers and invalid methods
+        assert!(build_pg_create_index_sql(
+            "docs; DROP TABLE x;",
+            &CreateIndexRequest {
+                field_name: "embedding".to_string(),
+                index_type: "hnsw".to_string(),
+                params: json!({}),
+            }
+        )
+        .is_err());
+        assert!(build_pg_create_index_sql(
+            "docs",
+            &CreateIndexRequest {
+                field_name: "embedding".to_string(),
+                index_type: "btree; DROP TABLE docs".to_string(),
+                params: json!({}),
+            }
+        )
+        .is_err());
+
+        assert_eq!(
+            build_pg_drop_index_sql("docs_embedding_hnsw_idx").expect("drop sql"),
+            "DROP INDEX IF EXISTS \"public\".\"docs_embedding_hnsw_idx\";"
+        );
+        assert!(build_pg_drop_index_sql("bad;name").is_err());
+
+        let parsed = parse_pg_index_row(
+            "docs_embedding_hnsw_idx",
+            "CREATE INDEX docs_embedding_hnsw_idx ON public.docs USING hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='64')",
+        );
+        assert_eq!(parsed.name, "docs_embedding_hnsw_idx");
+        assert_eq!(parsed.field_name, "embedding");
+        assert_eq!(parsed.index_type, "hnsw");
+        assert_eq!(parsed.params["ops"], "vector_cosine_ops");
     }
 }

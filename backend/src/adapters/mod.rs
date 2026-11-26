@@ -1,12 +1,18 @@
 pub mod chroma;
+pub mod duckdb;
 pub mod elasticsearch;
 pub mod embeddings;
 pub mod lancedb;
+pub mod mariadb;
+pub mod meilisearch;
 pub mod milvus;
+pub mod opensearch;
 pub mod pgvector;
 pub mod pinecone;
 pub mod qdrant;
 pub mod redis_stack;
+pub mod sqlite_vec;
+pub mod surrealdb;
 pub mod weaviate;
 
 use std::collections::HashMap;
@@ -178,6 +184,23 @@ pub struct SearchResponse {
     pub latency_ms: u64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct CollectionIndexInfo {
+    pub name: String,
+    pub field_name: String,
+    pub index_type: String,
+    pub params: serde_json::Value,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateIndexRequest {
+    pub field_name: String,
+    pub index_type: String,
+    #[serde(default)]
+    pub params: serde_json::Value,
+}
+
 #[async_trait]
 pub trait VectorDbAdapter: Send + Sync {
     async fn test_connection(&self) -> Result<ConnectionTestResult, AdapterError>;
@@ -205,6 +228,35 @@ pub trait VectorDbAdapter: Send + Sync {
         collection: &str,
         req: SearchRequest,
     ) -> Result<SearchResponse, AdapterError>;
+
+    async fn list_indexes(
+        &self,
+        _collection: &str,
+    ) -> Result<Vec<CollectionIndexInfo>, AdapterError> {
+        Err(AdapterError::InvalidRequest(
+            "Index management is not supported for this engine".to_string(),
+        ))
+    }
+
+    async fn create_index(
+        &self,
+        _collection: &str,
+        _req: CreateIndexRequest,
+    ) -> Result<(), AdapterError> {
+        Err(AdapterError::InvalidRequest(
+            "Index management is not supported for this engine".to_string(),
+        ))
+    }
+
+    async fn delete_index(
+        &self,
+        _collection: &str,
+        _index_name: &str,
+    ) -> Result<(), AdapterError> {
+        Err(AdapterError::InvalidRequest(
+            "Index management is not supported for this engine".to_string(),
+        ))
+    }
 }
 
 pub fn http_client_for_url(url: &str, timeout_secs: u64) -> Result<reqwest::Client, AdapterError> {
@@ -460,6 +512,23 @@ pub fn parse_extra_json(raw: &str) -> HashMap<String, String> {
         .unwrap_or_default()
 }
 
+pub fn assert_writable(db: &Database, target: &ConnectionTarget) -> Result<(), String> {
+    if let ConnectionTarget::RemoteConnection { connection_id } = target {
+        let conn = db
+            .get_remote_connection(connection_id)
+            .map_err(|e| e.to_string())?;
+        if let Some(c) = conn {
+            if c.read_only {
+                return Err(format!(
+                    "Connection '{}' is in Read-Only mode. Disable Read-Only mode in connection settings to make changes.",
+                    c.name
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 pub async fn resolve_adapter(
     db: &Database,
     pm: &ProcessManager,
@@ -500,6 +569,73 @@ pub async fn resolve_adapter(
                 "pgvector" => Ok(Box::new(pgvector::PgVectorAdapter::from_local(
                     host, inst.port,
                 ))),
+                "elasticsearch" => Ok(Box::new(elasticsearch::ElasticsearchAdapter::new(
+                    base_url,
+                    "none".to_string(),
+                    None,
+                )?)),
+                "meilisearch" => {
+                    let master_key = serde_json::from_str::<serde_json::Value>(&inst.config_json)
+                        .ok()
+                        .and_then(|v| {
+                            v.get("master_key")
+                                .and_then(|k| k.as_str())
+                                .map(ToString::to_string)
+                        });
+                    Ok(Box::new(meilisearch::MeilisearchAdapter::new(
+                        base_url, master_key,
+                    )?))
+                }
+                "surrealdb" => {
+                    let cfg = serde_json::from_str::<serde_json::Value>(&inst.config_json)
+                        .unwrap_or(serde_json::Value::Null);
+                    let user = cfg
+                        .get("user")
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.trim().is_empty())
+                        .unwrap_or("root");
+                    let pass = cfg
+                        .get("pass")
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.trim().is_empty())
+                        .unwrap_or("root");
+                    Ok(Box::new(surrealdb::SurrealDbAdapter::from_local(
+                        base_url, user, pass,
+                    )?))
+                }
+                "sqlite_vec" => Ok(Box::new(sqlite_vec::SqliteVecAdapter::new(
+                    std::path::PathBuf::from(&inst.data_dir),
+                )?)),
+                "opensearch" => Ok(Box::new(opensearch::OpenSearchAdapter::new(
+                    base_url,
+                    "none".to_string(),
+                    None,
+                )?)),
+                "mariadb" => Ok(Box::new(mariadb::MariaDbAdapter::from_local(
+                    host, inst.port,
+                )?)),
+                "duckdb" => {
+                    let installed = db
+                        .find_installed_engine_by_version(&inst.engine_type, &inst.engine_version)
+                        .map_err(|e| AdapterError::Api(e.to_string()))?
+                        .ok_or_else(|| {
+                            AdapterError::NotFound(format!(
+                                "DuckDB runtime v{} is not installed. Install it from the Engine Store first.",
+                                inst.engine_version
+                            ))
+                        })?;
+                    let cli_bin = std::path::PathBuf::from(&installed.binary_path);
+                    if !cli_bin.is_file() {
+                        return Err(AdapterError::NotFound(format!(
+                            "DuckDB binary missing at '{}'. Reinstall from Engine Store.",
+                            cli_bin.display()
+                        )));
+                    }
+                    Ok(Box::new(duckdb::DuckDbAdapter::new(
+                        std::path::PathBuf::from(&inst.data_dir),
+                        cli_bin,
+                    )?))
+                }
                 other => Err(AdapterError::UnsupportedEngine(other.to_string())),
             }
         }
@@ -575,6 +711,25 @@ fn build_remote_adapter(
             endpoint_url,
             auth_type,
             secret,
+        )?)),
+        "opensearch" => Ok(Box::new(opensearch::OpenSearchAdapter::new(
+            endpoint_url,
+            auth_type,
+            secret,
+        )?)),
+        "meilisearch" => Ok(Box::new(meilisearch::MeilisearchAdapter::new(
+            endpoint_url,
+            secret,
+        )?)),
+        "surrealdb" => Ok(Box::new(surrealdb::SurrealDbAdapter::new(
+            endpoint_url,
+            auth_type,
+            secret,
+            extra,
+        )?)),
+        "mariadb" => Ok(Box::new(mariadb::MariaDbAdapter::from_remote(
+            &endpoint_url,
+            secret.as_deref(),
         )?)),
         "redis_stack" | "redis" => Ok(Box::new(redis_stack::RedisStackAdapter::new(
             endpoint_url,

@@ -69,7 +69,13 @@ export function CreateInstanceModal({
     (e) => e.engine_type === engineType,
   );
   const catalogEntry = catalog.find((c) => c.engine_type === engineType);
-  const isEmbedded = catalogEntry?.embedded ?? engineType === "lancedb";
+  const isEmbedded =
+    catalogEntry?.embedded ??
+    (engineType === "lancedb" ||
+      engineType === "sqlite_vec" ||
+      engineType === "duckdb");
+  const isBuiltInEmbedded =
+    isEmbedded && (catalogEntry?.versions[0]?.size_bytes ?? 0) === 0;
   const trimmedName = name.trim();
   const nameConflict =
     trimmedName.length > 0 &&
@@ -127,7 +133,9 @@ export function CreateInstanceModal({
     setDataDir("");
     setConfigJson("{}");
     setAutoStart(false);
-    setIdleTimeoutMinutes(0);
+    setIdleTimeoutMinutes(
+      useAppStore.getState().preferences.defaultIdleTimeoutMinutes,
+    );
 
     const basePort = entry?.default_port ?? 6333;
     setPort(basePort);
@@ -210,7 +218,7 @@ export function CreateInstanceModal({
       return;
     }
 
-    if (!isEmbedded && !engineVersion) {
+    if (!isBuiltInEmbedded && !engineVersion) {
       toast.error(
         "No installed engine version",
         "Install this engine in the Engine Store first.",
@@ -317,7 +325,7 @@ export function CreateInstanceModal({
             <label className="mb-1 block text-[11px] font-medium text-[var(--text-secondary)]">
               Installed Version
             </label>
-            {isEmbedded ? (
+            {isBuiltInEmbedded ? (
               <div className="flex h-8 items-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 font-mono text-xs text-[var(--accent-primary)]">
                 embedded-1.0 (Zero Daemon)
               </div>
@@ -499,9 +507,13 @@ export function CreateInstanceModal({
               value={dataDir}
               onChange={(e) => setDataDir(e.target.value)}
               placeholder={
-                isEmbedded
+                engineType === "lancedb"
                   ? "Select or enter path to local .lance folder..."
-                  : "%LOCALAPPDATA%\\EmbedBay\\instances\\<id>\\data"
+                  : engineType === "sqlite_vec"
+                    ? "Select or enter folder for vectors.db..."
+                    : engineType === "duckdb"
+                      ? "Select or enter folder for vectors.duckdb..."
+                      : "%LOCALAPPDATA%\\EmbedBay\\instances\\<id>\\data"
               }
               className="h-8 flex-1 rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2.5 font-mono text-[11px] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
             />
@@ -590,7 +602,27 @@ export function CreateInstanceModal({
         {/* Engine Config JSON Overrides */}
         <div>
           <label className="mb-1 block text-[11px] font-medium text-[var(--text-secondary)]">
-            Engine Config Overrides (JSON)
+            Engine Config Overrides (JSON){" "}
+            {(engineType === "elasticsearch" || engineType === "opensearch") && (
+              <span className="font-mono text-[10px] text-[var(--text-muted)]">
+                (e.g. {`{"heap_mb": 1024}`})
+              </span>
+            )}
+            {engineType === "mariadb" && (
+              <span className="font-mono text-[10px] text-[var(--text-muted)]">
+                (e.g. {`{"innodb_buffer_pool_size": "64M"}`})
+              </span>
+            )}
+            {engineType === "meilisearch" && (
+              <span className="font-mono text-[10px] text-[var(--text-muted)]">
+                (e.g. {`{"master_key": ""}`})
+              </span>
+            )}
+            {engineType === "surrealdb" && (
+              <span className="font-mono text-[10px] text-[var(--text-muted)]">
+                (e.g. {`{"user": "root", "pass": "root"}`})
+              </span>
+            )}
           </label>
           <textarea
             rows={2}
