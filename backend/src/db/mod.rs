@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection};
+use serde::Serialize;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -39,12 +40,64 @@ const MIGRATIONS: &[Migration] = &[
         name: "0002_extended_settings",
         sql: include_str!("migrations/0002_extended_settings.sql"),
     },
+    Migration {
+        version: 3,
+        name: "0003_v01_features",
+        sql: include_str!("migrations/0003_v01_features.sql"),
+    },
+    Migration {
+        version: 4,
+        name: "0004_app_settings",
+        sql: include_str!("migrations/0004_app_settings.sql"),
+    },
 ];
 
 pub struct Database {
     conn: Mutex<Connection>,
     data_root: PathBuf,
     db_path: PathBuf,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TableRowCounts {
+    pub installed_engines: i64,
+    pub instances: i64,
+    pub remote_connections: i64,
+    pub connection_groups: i64,
+    pub tags: i64,
+    pub embedding_profiles: i64,
+    pub search_history: i64,
+    pub search_presets: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SqliteDiagnostics {
+    pub schema_version: i64,
+    pub sqlite_version: String,
+    pub journal_mode: String,
+    pub foreign_keys: bool,
+    pub quick_check: String,
+    pub db_bytes: u64,
+    pub wal_bytes: u64,
+    pub shm_bytes: u64,
+    pub table_counts: TableRowCounts,
+    pub stored_secret_refs: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct VacuumResult {
+    pub before_bytes: u64,
+    pub after_bytes: u64,
+    pub freed_bytes: u64,
+}
+
+fn file_size_or_zero(path: &Path) -> u64 {
+    std::fs::metadata(path).map(|m| m.len()).unwrap_or(0)
+}
+
+fn count_table(conn: &Connection, table: &str) -> Result<i64, DbError> {
+    let sql = format!("SELECT COUNT(*) FROM {}", table);
+    Ok(conn.query_row(&sql, [], |row| row.get(0))?)
 }
 
 impl Database {
@@ -98,6 +151,111 @@ impl Database {
         Ok(version)
     }
 
+    pub fn db_storage_bytes(&self) -> (u64, u64, u64) {
+        let db_bytes = file_size_or_zero(&self.db_path);
+        let wal_path = PathBuf::from(format!("{}-wal", self.db_path.display()));
+        let shm_path = PathBuf::from(format!("{}-shm", self.db_path.display()));
+        (
+            db_bytes,
+            file_size_or_zero(&wal_path),
+            file_size_or_zero(&shm_path),
+        )
+    }
+
+    pub fn sqlite_diagnostics(&self) -> Result<SqliteDiagnostics, DbError> {
+        let conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
+        let schema_version: i64 = conn.query_row(
+            "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
+            [],
+            |row| row.get(0),
+        )?;
+        let journal_mode: String = conn.query_row("PRAGMA journal_mode", [], |row| row.get(0))?;
+        let fk_val: i64 = conn.query_row("PRAGMA foreign_keys", [], |row| row.get(0))?;
+        let quick_check: String =
+            conn.query_row("PRAGMA quick_check(1)", [], |row| row.get(0))?;
+
+        let table_counts = TableRowCounts {
+            installed_engines: count_table(&conn, "installed_engines")?,
+            instances: count_table(&conn, "instances")?,
+            remote_connections: count_table(&conn, "remote_connections")?,
+            connection_groups: count_table(&conn, "connection_groups")?,
+            tags: count_table(&conn, "tags")?,
+            embedding_profiles: count_table(&conn, "embedding_profiles")?,
+            search_history: count_table(&conn, "search_history")?,
+            search_presets: count_table(&conn, "search_presets")?,
+        };
+
+        let remote_secrets: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM remote_connections WHERE secret_ref IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )?;
+        let embed_secrets: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM embedding_profiles WHERE secret_ref IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let (db_bytes, wal_bytes, shm_bytes) = self.db_storage_bytes();
+
+        Ok(SqliteDiagnostics {
+            schema_version,
+            sqlite_version: rusqlite::version().to_string(),
+            journal_mode,
+            foreign_keys: fk_val != 0,
+            quick_check,
+            db_bytes,
+            wal_bytes,
+            shm_bytes,
+            table_counts,
+            stored_secret_refs: remote_secrets + embed_secrets,
+        })
+    }
+
+    pub fn vacuum_database(&self) -> Result<VacuumResult, DbError> {
+        let (b_db, b_wal, b_shm) = self.db_storage_bytes();
+        let before_bytes = b_db.saturating_add(b_wal).saturating_add(b_shm);
+
+        {
+            let conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
+            conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
+        }
+
+        let (a_db, a_wal, a_shm) = self.db_storage_bytes();
+        let after_bytes = a_db.saturating_add(a_wal).saturating_add(a_shm);
+
+        Ok(VacuumResult {
+            before_bytes,
+            after_bytes,
+            freed_bytes: before_bytes.saturating_sub(after_bytes),
+        })
+    }
+
+    pub fn get_app_setting(&self, key: &str) -> Result<Option<String>, DbError> {
+        let conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
+        let mut stmt = conn.prepare("SELECT value FROM app_settings WHERE key = ?1")?;
+        let mut rows = stmt.query(params![key])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(row.get(0)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn set_app_setting(&self, key: &str, value: &str) -> Result<(), DbError> {
+        let conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
+        let updated_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        conn.execute(
+            "INSERT INTO app_settings (key, value, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+            params![key, value, updated_at],
+        )?;
+        Ok(())
+    }
+
     fn run_migrations(conn: &mut Connection) -> Result<(), DbError> {
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS schema_migrations (\
@@ -146,7 +304,7 @@ mod tests {
         let root = dir.path().to_path_buf();
 
         let db = Database::init(root.clone()).expect("initial db init");
-        assert_eq!(db.schema_version().expect("schema version"), 2);
+        assert_eq!(db.schema_version().expect("schema version"), 4);
         assert!(root.join("app.db").exists());
         assert!(root.join("bin").is_dir());
         assert!(root.join("instances").is_dir());
@@ -165,6 +323,7 @@ mod tests {
                 .collect();
 
             for expected in [
+                "app_settings",
                 "connection_groups",
                 "embedding_profiles",
                 "entity_tags",
@@ -172,6 +331,8 @@ mod tests {
                 "instances",
                 "remote_connections",
                 "schema_migrations",
+                "search_history",
+                "search_presets",
                 "tags",
             ] {
                 assert!(
@@ -186,7 +347,7 @@ mod tests {
 
         // Re-initializing on existing DB should cleanly be a no-op
         let db2 = Database::init(root).expect("idempotent db re-init");
-        assert_eq!(db2.schema_version().expect("schema version after re-init"), 2);
+        assert_eq!(db2.schema_version().expect("schema version after re-init"), 4);
     }
 
     #[test]
@@ -327,5 +488,118 @@ mod tests {
         assert!(db.delete_group(&group.id).expect("delete group"));
         assert!(db.delete_tag(&tag.id).expect("delete tag"));
         assert!(db.delete_installed_engine(&engine.id).expect("delete engine"));
+    }
+
+    #[test]
+    fn search_history_prunes_to_100_and_presets_crud() {
+        use crate::db::models::*;
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let db = Database::init(dir.path().to_path_buf()).expect("db init");
+
+        for i in 0..105 {
+            db.record_search_history(SaveSearchHistoryPayload {
+                connection_key: "local:inst1".to_string(),
+                collection: "docs".to_string(),
+                search_mode: "text".to_string(),
+                query_text: Some(format!("query {}", i)),
+                vector_json: None,
+                embedding_profile_id: Some("prof1".to_string()),
+                top_k: 10,
+                score_threshold: Some(0.5),
+                filter_json: None,
+                result_count: 3,
+                latency_ms: Some(12),
+            })
+            .expect("record history");
+        }
+
+        let history = db
+            .list_search_history("local:inst1", "docs", None)
+            .expect("list history");
+        assert_eq!(history.len(), 100);
+        assert_eq!(history[0].query_text.as_deref(), Some("query 104"));
+        assert_eq!(history[99].query_text.as_deref(), Some("query 5"));
+
+        let cleared = db
+            .clear_search_history("local:inst1", "docs")
+            .expect("clear history");
+        assert_eq!(cleared, 100);
+        assert!(db
+            .list_search_history("local:inst1", "docs", None)
+            .expect("empty history")
+            .is_empty());
+
+        let preset = db
+            .save_search_preset(SaveSearchPresetPayload {
+                name: "Rust Docs Top 5".to_string(),
+                connection_key: "local:inst1".to_string(),
+                collection: "docs".to_string(),
+                search_mode: "text".to_string(),
+                query_text: Some("ownership".to_string()),
+                vector_json: None,
+                embedding_profile_id: Some("prof1".to_string()),
+                top_k: 5,
+                score_threshold: Some(0.75),
+                filter_json: Some(r#"{"mode":"raw_json","json":{"topic":"rust"}}"#.to_string()),
+            })
+            .expect("save preset");
+
+        let presets = db
+            .list_search_presets("local:inst1", "docs")
+            .expect("list presets");
+        assert_eq!(presets.len(), 1);
+        assert_eq!(presets[0].name, "Rust Docs Top 5");
+        assert!(db.delete_search_preset(&preset.id).expect("delete preset"));
+        assert!(db
+            .list_search_presets("local:inst1", "docs")
+            .expect("empty presets")
+            .is_empty());
+    }
+
+    #[test]
+    fn sqlite_diagnostics_and_vacuum_work() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let db = Database::init(dir.path().to_path_buf()).expect("db init");
+
+        db.create_tag("prod".to_string(), "#F43F5E".to_string())
+            .expect("create tag");
+
+        let diag = db.sqlite_diagnostics().expect("sqlite diagnostics");
+        assert_eq!(diag.schema_version, 4);
+        assert_eq!(diag.quick_check, "ok");
+        assert!(diag.journal_mode.eq_ignore_ascii_case("wal"));
+        assert!(diag.foreign_keys);
+        assert!(diag.db_bytes > 0);
+        assert_eq!(diag.table_counts.tags, 1);
+        assert_eq!(diag.stored_secret_refs, 0);
+
+        let vacuum = db.vacuum_database().expect("vacuum database");
+        assert!(vacuum.after_bytes > 0);
+    }
+
+    #[test]
+    fn app_settings_get_and_set_roundtrip() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let db = Database::init(dir.path().to_path_buf()).expect("db init");
+
+        assert_eq!(
+            db.get_app_setting("close_behavior").expect("get unset"),
+            None
+        );
+
+        db.set_app_setting("close_behavior", "quit")
+            .expect("set quit");
+        assert_eq!(
+            db.get_app_setting("close_behavior").expect("get quit"),
+            Some("quit".to_string())
+        );
+
+        db.set_app_setting("close_behavior", "tray")
+            .expect("set tray");
+        assert_eq!(
+            db.get_app_setting("close_behavior").expect("get tray"),
+            Some("tray".to_string())
+        );
     }
 }

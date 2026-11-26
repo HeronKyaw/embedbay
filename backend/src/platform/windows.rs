@@ -33,6 +33,56 @@ pub fn graceful_stop_process(pid: u32) -> Result<(), String> {
     Ok(())
 }
 
+pub fn force_kill_process_tree(pid: u32) -> Result<(), String> {
+    let mut cmd = std::process::Command::new("taskkill");
+    cmd.args(["/PID", &pid.to_string(), "/T", "/F"]);
+    configure_std_command(&mut cmd);
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to invoke taskkill for PID {}: {}", pid, e))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let combined = format!("{} {}", stdout, stderr).to_ascii_lowercase();
+    if combined.contains("not found") || combined.contains("no running instance") {
+        return Ok(());
+    }
+    Err(format!(
+        "taskkill failed for PID {} ({}): {}",
+        pid,
+        output.status,
+        stderr.trim()
+    ))
+}
+
+pub fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
+    let mut cmd = std::process::Command::new("explorer.exe");
+    if path.is_file() {
+        cmd.arg("/select,").arg(path);
+    } else {
+        cmd.arg(path);
+    }
+    configure_std_command(&mut cmd);
+    cmd.spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Failed to launch explorer.exe: {}", e))
+}
+
+pub fn open_external_url(url: &str) -> Result<(), String> {
+    let mut cmd = std::process::Command::new("rundll32.exe");
+    cmd.args(["url.dll,FileProtocolHandler", url]);
+    configure_std_command(&mut cmd);
+    cmd.spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Failed to open URL in browser: {}", e))
+}
+
+pub fn keyring_backend_name() -> &'static str {
+    "Windows Credential Manager"
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

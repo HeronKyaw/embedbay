@@ -33,6 +33,8 @@ pub struct AppState {
     pub process_manager: Arc<ProcessManager>,
     pub event_sink: Arc<dyn EventSink>,
     pub is_quitting: AtomicBool,
+    pub close_to_tray: AtomicBool,
+    pub started_at: std::time::Instant,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -82,6 +84,13 @@ pub fn run() {
                 supervisor::autostart::run_autostart_sequence(pm_boot, db_boot).await;
             });
 
+            let close_to_tray = db
+                .get_app_setting("close_behavior")
+                .ok()
+                .flatten()
+                .as_deref()
+                != Some("quit");
+
             app.manage(AppState {
                 db,
                 manifest,
@@ -89,6 +98,8 @@ pub fn run() {
                 process_manager,
                 event_sink,
                 is_quitting: AtomicBool::new(false),
+                close_to_tray: AtomicBool::new(close_to_tray),
+                started_at: std::time::Instant::now(),
             });
 
             supervisor::tray::setup_tray(app)?;
@@ -104,10 +115,15 @@ pub fn run() {
             commands::get_app_status,
             commands::get_autostart_enabled,
             commands::set_autostart_enabled,
+            commands::set_close_behavior,
+            commands::get_diagnostics,
+            commands::open_data_path,
+            commands::open_external_url,
             commands::engines::list_engine_catalog,
             commands::engines::list_installed_engines,
             commands::engines::get_storage_usage,
             commands::engines::cleanup_unused_engines,
+            commands::engines::compact_database,
             commands::engines::install_engine,
             commands::engines::uninstall_engine,
             commands::instances::list_instances,
@@ -158,27 +174,49 @@ pub fn run() {
             commands::explorer::upsert_records,
             commands::explorer::delete_records,
             commands::explorer::search_vectors,
+            commands::explorer::list_collection_indexes,
+            commands::explorer::create_collection_index,
+            commands::explorer::delete_collection_index,
+            commands::search_meta::list_search_history,
+            commands::search_meta::record_search_history,
+            commands::search_meta::clear_search_history,
+            commands::search_meta::list_search_presets,
+            commands::search_meta::save_search_preset,
+            commands::search_meta::delete_search_preset,
             commands::instances::backup_instance,
             commands::instances::restore_instance,
             commands::analytics::compute_embedding_projection,
             commands::transfer::import_records,
             commands::transfer::export_records,
+            commands::transfer::migrate_collection,
             commands::transfer::export_search_results,
+            commands::ingest::preview_document_chunks,
+            commands::ingest::ingest_documents,
         ])
         .build(tauri::generate_context!())
         .expect("error while building EmbedBay Tauri application");
 
     app.run(|app_handle, event| {
         if let RunEvent::ExitRequested { api, .. } = event {
-            let is_quitting = app_handle
-                .try_state::<AppState>()
-                .map(|s| s.is_quitting.load(Ordering::SeqCst))
-                .unwrap_or(false);
-
-            // Destroy-on-close: closing the WebView frees UI memory while keeping the
-            // Rust supervisor running in the System Tray until "Quit EmbedBay" is chosen.
-            if !is_quitting {
-                api.prevent_exit();
+            if let Some(state) = app_handle.try_state::<AppState>() {
+                let is_quitting = state.is_quitting.load(Ordering::SeqCst);
+                if !is_quitting {
+                    if state.close_to_tray.load(Ordering::SeqCst) {
+                        // Destroy-on-close: closing the WebView frees UI memory while keeping the
+                        // Rust supervisor running in the System Tray until "Quit EmbedBay" is chosen.
+                        api.prevent_exit();
+                    } else {
+                        // Quit mode: prevent immediate abrupt exit so managed DBs stop gracefully first.
+                        api.prevent_exit();
+                        state.is_quitting.store(true, Ordering::SeqCst);
+                        let handle = app_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let st = handle.state::<AppState>();
+                            let _ = st.process_manager.stop_all_instances().await;
+                            handle.exit(0);
+                        });
+                    }
+                }
             }
         }
     });

@@ -37,6 +37,8 @@ pub struct StorageUsageSummary {
     pub unused_engine_bytes: u64,
     pub unused_engine_count: usize,
     pub total_instance_bytes: u64,
+    pub db_bytes: u64,
+    pub logs_bytes: u64,
     pub engines: Vec<InstalledEngineStorage>,
     pub instances: Vec<InstanceStorage>,
 }
@@ -92,9 +94,12 @@ pub fn compute_storage_usage(db: &Database) -> Result<StorageUsageSummary, Strin
     }
 
     let mut total_instance_bytes = 0u64;
+    let mut logs_bytes = 0u64;
     let mut instances = Vec::with_capacity(all_instances.len());
     for inst in all_instances {
         let size_bytes = dir_size_bytes(Path::new(&inst.data_dir));
+        let inst_logs_dir = db.instance_root(&inst.id).join("logs");
+        logs_bytes = logs_bytes.saturating_add(dir_size_bytes(&inst_logs_dir));
         total_instance_bytes = total_instance_bytes.saturating_add(size_bytes);
         instances.push(InstanceStorage {
             instance_id: inst.id,
@@ -105,12 +110,23 @@ pub fn compute_storage_usage(db: &Database) -> Result<StorageUsageSummary, Strin
         });
     }
 
+    instances.sort_by(|a, b| {
+        b.size_bytes
+            .cmp(&a.size_bytes)
+            .then_with(|| a.name.cmp(&b.name))
+    });
+
+    let (db_main, db_wal, db_shm) = db.db_storage_bytes();
+    let db_bytes = db_main.saturating_add(db_wal).saturating_add(db_shm);
+
     Ok(StorageUsageSummary {
         data_root: db.data_root().to_string_lossy().into_owned(),
         total_engine_bytes,
         unused_engine_bytes,
         unused_engine_count,
         total_instance_bytes,
+        db_bytes,
+        logs_bytes,
         engines,
         instances,
     })
@@ -178,6 +194,11 @@ pub fn get_storage_usage(state: State<'_, AppState>) -> Result<StorageUsageSumma
 #[tauri::command]
 pub async fn cleanup_unused_engines(state: State<'_, AppState>) -> Result<CleanupResult, String> {
     cleanup_unused_engines_inner(&state.db)
+}
+
+#[tauri::command]
+pub fn compact_database(state: State<'_, AppState>) -> Result<crate::db::VacuumResult, String> {
+    state.db.vacuum_database().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -259,28 +280,35 @@ mod tests {
         })
         .expect("insert active engine");
 
-        db.create_instance(CreateInstancePayload {
-            name: "Active Prod Qdrant".to_string(),
-            description: None,
-            color: None,
-            group_id: None,
-            engine_type: "qdrant".to_string(),
-            engine_version: "1.20.2".to_string(),
-            host: Some("127.0.0.1".to_string()),
-            port: 16433,
-            grpc_port: Some(16434),
-            data_dir: None,
-            config_json: None,
-            auto_start: Some(false),
-            idle_timeout_minutes: Some(0),
-            tag_ids: None,
-        })
-        .expect("create active instance");
+        let active_inst = db
+            .create_instance(CreateInstancePayload {
+                name: "Active Prod Qdrant".to_string(),
+                description: None,
+                color: None,
+                group_id: None,
+                engine_type: "qdrant".to_string(),
+                engine_version: "1.20.2".to_string(),
+                host: Some("127.0.0.1".to_string()),
+                port: 16433,
+                grpc_port: Some(16434),
+                data_dir: None,
+                config_json: None,
+                auto_start: Some(false),
+                idle_timeout_minutes: Some(0),
+                tag_ids: None,
+            })
+            .expect("create active instance");
+
+        let logs_dir = db.instance_root(&active_inst.id).join("logs");
+        std::fs::create_dir_all(&logs_dir).expect("mkdir logs");
+        std::fs::write(logs_dir.join("instance.log"), vec![b'x'; 512]).expect("write log");
 
         let summary_before = compute_storage_usage(&db).expect("summary before");
         assert_eq!(summary_before.unused_engine_count, 1);
         assert_eq!(summary_before.unused_engine_bytes, 4096);
         assert_eq!(summary_before.total_engine_bytes, 4096 + 8192);
+        assert!(summary_before.db_bytes > 0);
+        assert_eq!(summary_before.logs_bytes, 512);
 
         let cleanup = cleanup_unused_engines_inner(&db).expect("cleanup");
         assert_eq!(cleanup.removed_count, 1);

@@ -91,6 +91,51 @@ pub fn graceful_stop_process(pid: u32) -> Result<(), String> {
     os_impl::graceful_stop_process(pid)
 }
 
+/// Forcefully terminates a process and all of its descendant child processes.
+pub fn force_kill_process_tree(pid: u32) -> Result<(), String> {
+    os_impl::force_kill_process_tree(pid)
+}
+
+/// Validates that an external URL uses strict `https://` without control/whitespace injection.
+pub fn validate_external_url(url: &str) -> Result<&str, String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err("URL must not be empty".to_string());
+    }
+    if trimmed.len() > 2048 {
+        return Err("URL exceeds maximum allowed length".to_string());
+    }
+    if !trimmed.starts_with("https://") {
+        return Err("Only https:// external URLs are permitted".to_string());
+    }
+    if trimmed
+        .chars()
+        .any(|c| c.is_whitespace() || c.is_control())
+    {
+        return Err("URL contains invalid whitespace or control characters".to_string());
+    }
+    Ok(trimmed)
+}
+
+/// Opens an existing directory or file in the OS native file manager.
+pub fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Err(format!("Path does not exist: {}", path.display()));
+    }
+    os_impl::open_path_in_file_manager(path)
+}
+
+/// Opens a validated `https://` URL in the user's default browser.
+pub fn open_external_url(url: &str) -> Result<(), String> {
+    let valid = validate_external_url(url)?;
+    os_impl::open_external_url(valid)
+}
+
+/// Returns the human-readable OS credential store name used by `keyring`.
+pub fn keyring_backend_name() -> &'static str {
+    os_impl::keyring_backend_name()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,5 +147,19 @@ mod tests {
         assert_ne!(info.target_triple, "unsupported");
         #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
         assert_eq!(info.target_triple, "x86_64-pc-windows-msvc");
+    }
+
+    #[test]
+    fn validate_external_url_allows_only_safe_https() {
+        assert_eq!(
+            validate_external_url("https://github.com/HeronKyaw/embedbay").expect("valid https"),
+            "https://github.com/HeronKyaw/embedbay"
+        );
+        assert!(validate_external_url("").is_err());
+        assert!(validate_external_url("http://example.com").is_err());
+        assert!(validate_external_url("file:///C:/Windows/System32").is_err());
+        assert!(validate_external_url("javascript:alert(1)").is_err());
+        assert!(validate_external_url("https://example.com/path with spaces").is_err());
+        assert!(validate_external_url("https://example.com/\nwhoami").is_err());
     }
 }
