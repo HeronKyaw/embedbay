@@ -22,7 +22,9 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
 
       - name: Install Rust stable toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -33,6 +35,9 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: backend
+
+      - name: Install workspace Tauri CLI
+        run: npm ci
 
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
@@ -54,9 +59,18 @@ jobs:
           # WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         with:
           projectPath: backend
+          tauriScript: ..\node_modules\.bin\tauri.cmd
           tagName: v__VERSION__
           releaseName: "EmbedBay v__VERSION__"
-          releaseBody: "See installer artifacts attached below (`*-setup.exe` NSIS & `*_en-US.msi` WiX)."
+          releaseBody: |
+            ## Windows Installers (`x64`)
+            - **Recommended (Per-User, no admin prompt):** `EmbedBay_*_x64-setup.exe` (NSIS)
+            - **Enterprise / MSI:** `EmbedBay_*_x64_en-US.msi` (WiX)
+
+            Requires Windows 10/11 (`x86_64`) and Microsoft Edge WebView2 Runtime.
+
+            ---
+            **Code Signing & Privacy:** Free open-source code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). Zero telemetry; see [CODE_SIGNING_POLICY.md](https://github.com/HeronKyaw/embedbay/blob/main/CODE_SIGNING_POLICY.md) for signing provenance, initial release notes, and privacy details.
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
