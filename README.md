@@ -1,95 +1,105 @@
-# EmbedBay
+<div align="center">
+  <img src="installer/icons/128x128.png" width="84" height="84" alt="EmbedBay logo" />
+  <h1>EmbedBay</h1>
+  <p><strong>Zero-Docker native vector database manager, runtime supervisor, and multi-engine explorer.</strong></p>
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License" /></a>
+    <img src="https://img.shields.io/badge/Platform-Windows%20x64-0078D6.svg" alt="Platform: Windows x64" />
+    <img src="https://img.shields.io/badge/Stack-Tauri%20v2%20%C2%B7%20Rust%20%C2%B7%20React%2019-14b8a6.svg" alt="Tauri v2, Rust, React 19" />
+    <a href="https://github.com/HeronKyaw/embedbay/releases"><img src="https://img.shields.io/github/v/release/HeronKyaw/embedbay?include_prereleases&label=Release" alt="Latest Release" /></a>
+  </p>
+  <p>
+    <a href="#features">Features</a> ·
+    <a href="#supported-engines">Supported Engines</a> ·
+    <a href="#installation">Installation</a> ·
+    <a href="#development">Development</a> ·
+    <a href="#roadmap">Roadmap</a> ·
+    <a href="#documentation">Docs</a>
+  </p>
+</div>
 
-**Zero-Docker native vector database manager, runtime supervisor, and multi-engine explorer built with Tauri v2, Rust, and React 19.**
-
-EmbedBay installs, runs, monitors, and explores local vector databases natively on Windows (with cross-platform foundations in place for macOS and Linux), without requiring Docker Desktop or heavy Electron runtimes.
+EmbedBay installs, runs, monitors, and explores local and remote vector databases natively on Windows—without Docker Desktop or heavy Electron runtimes. Built with Tauri v2, Rust, and React 19, it stays local-first with zero telemetry and stores API credentials strictly in the OS keyring.
 
 ---
 
-## Key Features
+## Features
 
-- **Native Engine Store (`manifests/engines.json`)**
-  One-click download, SHA-256 checksum verification, Zip-Slip-safe archive extraction, and versioned isolation for native engines.
-- **Process Supervisor & System Tray Persistence**
-  - Spawns managed engines with `CREATE_NO_WINDOW` (`0x08000000`) on Windows—no flashing console windows.
-  - TCP port conflict detection + automatic port suggestion, HTTP/TCP health polling, exponential backoff crash restarts, graceful shutdown (`CTRL_BREAK_EVENT` / `pg_ctl stop`), and rotating log streaming (`10 MB x 3` files, 1,000-line memory ring buffer).
-  - Live `sysinfo` per-instance RAM, CPU, uptime, and disk metrics.
-  - **Destroy-on-close WebView** reclaims UI RAM while background databases continue running in the System Tray; supports **Start with Windows (`--minimized`)** and single-instance window focus locking.
-  - **Per-instance Idle Auto-Stop** and **Unused Engine Cleanup** in Settings & Engine Store.
-- **Groups & Color-Coded Tags**
-  Organize local instances and remote connections in collapsible Groups (with bulk Start/Stop) and filter instantaneously with 8 preset swatch tags.
-- **Multi-Tab Explorer & CRUD**
-  Inspect multiple local or remote collections side-by-side with a collection tree, schema/stats header, virtualized record table (`@tanstack/react-table` + `@tanstack/react-virtual`), right-side JSON payload drawer, and Create/Edit/Delete record & collection modals.
-- **Search Playground & Embedding Profiles**
-  Run raw vector similarity search, "Find Similar" from any row, visual or raw-JSON metadata filtering, latency/score histograms, and plain-text semantic search powered by **Ollama**, **OpenAI-compatible**, **Google Gemini**, **Cohere**, **Voyage AI**, or **HuggingFace TEI** embedding endpoints.
-- **2D/3D WebGL Visualizer & Import/Export/Backup**
-  Interactive WebGL scatter plots (`plotly.js-dist-min`) driven by Rust-side **PCA** and **UMAP** dimensionality reduction, JSONL/CSV batch import (with optional auto-embedding) & export, plus safe stop-before-zip **Backup / Restore**.
-- **OS Keyring Credential Security & Auto-Updater**
-  Remote DB API keys and embedding provider tokens are stored in Windows Credential Manager via the Rust `keyring` crate (never plaintext in SQLite). In-app updates use cryptographically signed `tauri-plugin-updater` GitHub Releases.
+### Native Runtime & Supervision
+- **One-Click Engine Store** — Downloads official native binaries over HTTPS, verifies SHA-256 checksums, and isolates versions cleanly.
+- **Silent Process Management** — Runs background engines with zero console window flashes, automatic port conflict suggestions, health polling, and crash restarts.
+- **System Tray & Idle Auto-Stop** — Reclaims UI RAM when closed to the tray, tracks live CPU/RAM/disk metrics and rotating logs, and stops idle instances automatically.
+- **Safe Backup & Restore** — Stops running instances before zipping data directories to guarantee consistent snapshots.
+
+### Multi-Tab Explorer & Organization
+- **Side-by-Side Collections** — Browse schemas, stats, and large vector tables across multiple local or remote tabs with a dedicated JSON record inspector.
+- **Index & Schema Controls** — Inspect, create, and drop Qdrant payload indexes and pgvector HNSW / IVFFlat indexes directly in the UI.
+- **Groups, Tags & Read-Only Mode** — Organize instances into collapsible groups (with bulk start/stop), filter by color tags, and lock production clusters against accidental writes.
+
+### Search, Ingestion & Migration
+- **Search Playground & A/B Compare** — Run vector or plain-text queries, filter metadata, inspect latency histograms, and compare two queries or collections side-by-side.
+- **History, Presets & Code Snippets** — Save reusable search presets, browse per-collection history, and copy Python, TypeScript, `curl`, or SQL snippets (with placeholder env vars).
+- **Ingestion & Cross-Engine Migration** — Preview recursive or Markdown-header chunking for `.md` / `.txt` files, import/export JSONL and CSV, and migrate/re-embed collections across engines.
+
+### Visualization, Embeddings & Security
+- **2D/3D WebGL Visualizer** — Explore vector clusters interactively with Rust-native PCA and UMAP dimensionality reduction.
+- **6 Embedding Providers** — Connect Ollama, OpenAI-compatible APIs, Google Gemini, Cohere, Voyage AI, or HuggingFace TEI.
+- **Keyring Security & Auto-Updater** — Keeps remote tokens in Windows Credential Manager (never plaintext in SQLite), supports Light/Dark/Auto themes, and verifies updates cryptographically.
 
 ---
 
 ## Supported Engines
 
-### Tier 1 — Local Managed & Embedded Engines
+| Engine | Local Mode | Remote | Default Port |
+| --- | --- | --- | --- |
+| **Qdrant** | Native daemon (`qdrant.exe`) | HTTP / HTTPS | `6333`, `6334` (gRPC) |
+| **Chroma** | Native CLI daemon (`chroma.exe`) | HTTP / HTTPS | `8000` |
+| **PostgreSQL + pgvector** | Portable `postgres.exe` + `vector.dll` | `postgresql://` (+ TLS) | `5432` |
+| **Meilisearch** | Native daemon (`meilisearch.exe`) | HTTP / HTTPS | `7700` |
+| **SurrealDB** | Native daemon (`surreal.exe` + SurrealKV) | HTTP / HTTPS | `8008` |
+| **Elasticsearch** | Bundled-JDK daemon | HTTP / HTTPS | `9200` |
+| **OpenSearch** | Bundled-JDK daemon | HTTP / HTTPS | `9201` |
+| **MariaDB 11.8 Vector** | Portable `mariadbd.exe` | `mysql://` (+ TLS) | `3306` |
+| **LanceDB** | Embedded directory (`0 MB` idle RAM) | — | None |
+| **SQLite + sqlite-vec** | Embedded `vec0` (`0 MB` idle RAM) | — | None |
+| **DuckDB + vss** | On-demand CLI (`0 MB` idle RAM) | — | None |
+| **Pinecone** | — | HTTPS | — |
+| **Weaviate** | — | HTTP / HTTPS | — |
+| **Milvus / Zilliz** | — | HTTP / HTTPS | — |
+| **Redis Stack** | — | Redis (`FT.SEARCH`) | — |
 
-| Engine | Mode | Default Port |
-| --- | --- | --- |
-| **Qdrant** | Native daemon (`qdrant.exe`) | `6333` (HTTP), `6334` (gRPC) |
-| **Chroma** | Native CLI daemon (`chroma.exe run`) | `8000` |
-| **PostgreSQL + pgvector** | Portable `postgres.exe` + `vector.dll` | `5432` |
-| **LanceDB** | Built-in embedded `.lance` directory (`0 MB` idle RAM) | None |
-| **Meilisearch** | Native daemon (`meilisearch.exe`) | `7700` |
-| **SurrealDB** | Native daemon (`surreal.exe` + SurrealKV) | `8008` |
-| **SQLite + sqlite-vec** | Built-in embedded `vec0` (`vectors.db`, `0 MB` idle RAM) | None |
-| **Elasticsearch** | Bundled-JDK daemon (`elasticsearch.bat`) | `9200` |
-| **OpenSearch** | Bundled-JDK daemon (`opensearch.bat`) | `9201` |
-| **MariaDB 11.8 Vector** | Portable `mariadbd.exe` + `VECTOR(N)` | `3306` |
-| **DuckDB + vss** | On-demand embedded CLI (`duckdb.exe`, `0 MB` idle RAM) | None |
-
-### Tier 2 — Remote Connections
-
-Connect to self-hosted or managed clusters via unified `VectorDbAdapter` clients:
-
-- **Qdrant** (remote HTTP/HTTPS)
-- **Chroma** (remote HTTP/HTTPS)
-- **PostgreSQL + pgvector** (`postgresql://` with optional TLS via `tokio-postgres-rustls`)
-- **Meilisearch** (remote HTTP/HTTPS)
-- **SurrealDB** (remote HTTP/HTTPS)
-- **Elasticsearch** (remote HTTP/HTTPS)
-- **OpenSearch** (remote HTTP/HTTPS)
-- **MariaDB 11.8 Vector** (`mysql://` / `mariadb://` with optional TLS via `rustls`)
-- **Pinecone**
-- **Weaviate**
-- **Milvus / Zilliz**
-- **Redis Stack** (RediSearch vector indexes)
+> *Note: Embedded LanceDB uses EmbedBay's portable directory format (`records.jsonl`) in v0.1 ahead of native binary `.lance` / Arrow support in v0.2.*
 
 ---
 
-## Quick Start (Development)
+## Installation
 
-**Prerequisites:** Node.js 22+, Rust stable toolchain (`x86_64-pc-windows-msvc`), and Microsoft Edge WebView2 Runtime (pre-installed on Windows 11).
+Download the latest Windows `x64` installer from [GitHub Releases](https://github.com/HeronKyaw/embedbay/releases):
+- **Recommended (Per-User):** `EmbedBay_<version>_x64-setup.exe` (NSIS installer, no admin prompt required)
+- **Enterprise / MSI:** `EmbedBay_<version>_x64_en-US.msi` (WiX installer)
+
+Requires Windows 10/11 (`x86_64`) and Microsoft Edge WebView2 Runtime (pre-installed on Windows 11). See the [Getting Started Guide](docs/getting-started.md) for your first database setup.
+
+---
+
+## Development
+
+**Prerequisites:** Node.js 22+, Rust stable toolchain (`x86_64-pc-windows-msvc`), and WebView2 Runtime.
 
 ```powershell
-# Install root Tauri CLI and frontend packages
+# Install workspace Tauri CLI and frontend dependencies
 npm install
 npm --prefix frontend install
 
-# Start Tauri desktop app in hot-reload dev mode
+# Launch desktop app in hot-reload dev mode
 npm run dev
 
-# Run backend Rust test suite
+# Run backend Rust tests & verify production frontend build
 npm run backend:test
-
-# Typecheck & bundle production frontend
 npm run frontend:build
 ```
 
-To generate Windows installers locally (`EmbedBay_<ver>_x64-setup.exe` NSIS + `EmbedBay_<ver>_x64_en-US.msi` WiX), see [docs/development.md](docs/development.md) and [docs/releasing.md](docs/releasing.md).
-
----
-
-## Repository Structure
+<details>
+<summary>Repository Structure</summary>
 
 ```text
 embedbay/
@@ -102,50 +112,34 @@ embedbay/
 └── .github/workflows/          # Windows CI/CD release pipeline
 ```
 
+</details>
+
 ---
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for the full public milestone breakdown.
+See [ROADMAP.md](ROADMAP.md) for the full milestone breakdown.
 
-### v0.1 (Windows Launch)
-- [x] Native Engine Store (Qdrant, Chroma, PostgreSQL + pgvector, Meilisearch, SurrealDB, Elasticsearch, OpenSearch, MariaDB 11.8 Vector, embedded LanceDB, SQLite + sqlite-vec, DuckDB + vss) & `CREATE_NO_WINDOW` process supervision
-- [x] System Tray persistence, idle auto-stop, stop-before-zip Backup/Restore, OS Keyring secrets, and signed auto-updater
-- [x] Multi-Tab Explorer, 2D/3D PCA/UMAP WebGL Visualizer, JSONL/CSV Import/Export, and Tier 2 remote adapters
-- [x] Read-Only Safety Mode & Copy-as-Code Snippets (Python, TypeScript, `curl`, `psql`/SQL)
-- [x] Expanded HTTP Embedding Providers (Ollama, OpenAI-Compatible, Gemini, Cohere, Voyage AI, HuggingFace TEI)
-- [x] Search History, Saved Presets & Side-by-Side A/B Search Comparison
-- [x] Collection Migration & Re-Embedding Wizard
-- [x] Document Ingestion & Chunking Previewer (`.md` / `.txt`)
-- [x] Index & Schema Management for Qdrant & pgvector
-
-> *Note: Embedded LanceDB uses EmbedBay's portable directory format (`records.jsonl`) in v0.1 ahead of native Arrow/Lance binary support in v0.2.*
-
-### v0.2 (Engine & Ingestion Depth)
-- [ ] Native binary `.lance` table reader/writer (`lancedb` / Arrow) + `.parquet` import/export
-- [ ] Zero-setup local ONNX embeddings (`local_onnx`) via on-demand Engine Store downloads
-- [ ] PDF document ingestion (`.pdf`)
-- [ ] Visualizer query overlay (project live query vector + top-K hits onto 2D/3D scatter plot)
-
-### Future / Exploring
-- [ ] Local MCP Server integration for AI coding agents
-- [ ] Hybrid Search (dense + sparse/BM25 + RRF), Named Vectors & Reranking profiles
-- [ ] macOS & Linux platform implementations & multi-OS CI release builds
+- **v0.1 — Windows Launch (Complete):** All 11 local/embedded engines, 12 remote adapters, process supervisor & tray persistence, multi-tab Explorer, Search Playground + A/B compare, `.md`/`.txt` chunking, cross-engine migration, 2D/3D PCA/UMAP visualizer, and Qdrant/pgvector index management.
+- **v0.2 — Engine & Ingestion Depth:** Native binary `.lance` & `.parquet` support, zero-setup local ONNX embeddings (`local_onnx`), PDF ingestion, and visualizer query/top-K overlay.
+- **Future / Exploring:** Local MCP Server for AI coding agents, hybrid dense + sparse/BM25 search with RRF & reranking, and macOS/Linux support.
 
 ---
 
 ## Documentation
 
-- [Getting Started & User Guide](docs/getting-started.md) — Installing EmbedBay on Windows, running your first vector database, searching, visualizing, and backing up data.
-- [System Architecture](docs/architecture.md) — Platform isolation (`backend/src/platform/`), process supervision, SQLite + Keyring storage, analytics, and IPC design.
-- [Engines & Remote Adapters](docs/engines-and-adapters.md) — Tier 1 managed binaries, LanceDB/pgvector details, Tier 2 remote connection formats, and manifest updates.
-- [Developer Guide](docs/development.md) — Toolchain setup, tests, UI theme tokens, and local build workflow.
-- [Release & Packaging Guide](docs/releasing.md) — Updater keypair setup, NSIS/WiX installers, GitHub Actions CI/CD, and release verification.
+| Guide | Covers |
+| --- | --- |
+| [Getting Started](docs/getting-started.md) | Installing EmbedBay, launching your first engine, searching, visualizing, and backups |
+| [System Architecture](docs/architecture.md) | Platform isolation, process supervision, SQLite + Keyring storage, and analytics |
+| [Engines & Remote Adapters](docs/engines-and-adapters.md) | Tier 1 local binaries, embedded engines, Tier 2 remote connections, and manifest updates |
+| [Developer Guide](docs/development.md) | Toolchain setup, testing conventions, theme tokens, and unsigned local builds |
+| [Release & Packaging Guide](docs/releasing.md) | Updater keypair, SignPath Foundation setup, NSIS/WiX installers, and CI/CD |
 
 ---
 
 ## License, Privacy & Code Signing
 
 - **License:** Released under the [MIT License](LICENSE).
-- **Privacy:** EmbedBay collects zero telemetry, analytics, or crash reports. Local data is stored under `%LOCALAPPDATA%\com.embedbay.app`, and API keys live in Windows Credential Manager (`keyring`). See [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) for full details.
+- **Privacy:** Zero telemetry, analytics, or crash reporting. Data is stored locally under `%LOCALAPPDATA%\com.embedbay.app`, and secrets stay in Windows Credential Manager (`keyring`). See [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) for full details.
 - **Code Signing:** Free open-source Windows code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/) (enrolling after the `v0.1.0` initial public release).
