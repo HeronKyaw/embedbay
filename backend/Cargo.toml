@@ -3,6 +3,7 @@ name = "embedbay"
 version = "0.1.0"
 description = "Local Vector DB Manager & Explorer"
 authors = ["EmbedBay"]
+license = "MIT"
 edition = "2021"
 
 [lib]

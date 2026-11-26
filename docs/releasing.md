@@ -27,11 +27,28 @@ EmbedBay ships `tauri-plugin-updater` configured in `backend/tauri.conf.json`. *
 
 ## 2. Optional Windows Authenticode Code Signing
 
-Without an Authenticode signature, Windows SmartScreen warns users on first launch. To sign both `embedbay.exe` and `.exe` / `.msi` installers in CI:
+Without an Authenticode signature, Windows SmartScreen warns users on first launch.
 
-1. Obtain an EV / OV code-signing certificate or Azure Trusted Signing setup.
-2. Store certificate secrets (`WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD` or Trusted Signing credentials) in GitHub Secrets.
-3. Configure `bundle.windows.signCommand` (or Azure Trusted Signing environment setup) and uncomment the certificate env vars in `.github/workflows/release-windows.yml`.
+### Option A: SignPath Foundation (Free for Open Source — Recommended)
+
+EmbedBay uses the [MIT License](../LICENSE) and documents its build provenance and zero-telemetry guarantee in [CODE_SIGNING_POLICY.md](../CODE_SIGNING_POLICY.md) to qualify for free open-source Authenticode signing via [SignPath Foundation](https://signpath.org/):
+
+1. **Publish an initial public release (`v0.1.0`):** SignPath Foundation requires an already-published open-source release in the target distribution format (`.exe` / `.msi`) before reviewing an application.
+2. **Apply at [`https://signpath.org/apply`](https://signpath.org/apply):** Reference `https://github.com/HeronKyaw/embedbay`, `LICENSE`, `CODE_SIGNING_POLICY.md`, and the published `v0.1.0` release.
+3. **Configure GitHub Secrets (once approved):**
+   - `SIGNPATH_API_TOKEN`
+   - `SIGNPATH_ORG_ID`
+   - `SIGNPATH_PROJECT_SLUG`
+4. **CI Order of Operations with `tauri-plugin-updater`:** Because SignPath signs artifacts asynchronously via `signpath/github-action-submit-signing-request` rather than a local `signtool` command, the CI pipeline for `v0.1.1+` must follow this sequence:
+   1. Build unsigned Windows installers (`.exe` / `.msi`) via Tauri.
+   2. Upload and submit the installers to `signpath/github-action-submit-signing-request` and download the SignPath-signed installers.
+   3. Generate Tauri updater `.sig` files and `latest.json` against the **SignPath-signed** installers using `TAURI_SIGNING_PRIVATE_KEY` (`tauri signer sign`), then upload everything to the GitHub Release.
+
+### Option B: Commercial Certificate or Azure Artifact Signing
+
+1. Obtain an EV / OV code-signing certificate or Azure Artifact Signing setup.
+2. Store certificate secrets (`WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD`, or Azure credentials) in GitHub Secrets.
+3. Configure `bundle.windows.signCommand` in `backend/tauri.conf.json` and uncomment the certificate env vars in `.github/workflows/release-windows.yml`.
 
 ---
 

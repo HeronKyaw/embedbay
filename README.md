@@ -141,3 +141,11 @@ See [ROADMAP.md](ROADMAP.md) for the full public milestone breakdown.
 - [Engines & Remote Adapters](docs/engines-and-adapters.md) — Tier 1 managed binaries, LanceDB/pgvector details, Tier 2 remote connection formats, and manifest updates.
 - [Developer Guide](docs/development.md) — Toolchain setup, tests, UI theme tokens, and local build workflow.
 - [Release & Packaging Guide](docs/releasing.md) — Updater keypair setup, NSIS/WiX installers, GitHub Actions CI/CD, and release verification.
+
+---
+
+## License, Privacy & Code Signing
+
+- **License:** Released under the [MIT License](LICENSE).
+- **Privacy:** EmbedBay collects zero telemetry, analytics, or crash reports. Local data is stored under `%LOCALAPPDATA%\com.embedbay.app`, and API keys live in Windows Credential Manager (`keyring`). See [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) for full details.
+- **Code Signing:** Free open-source Windows code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/) (enrolling after the `v0.1.0` initial public release).

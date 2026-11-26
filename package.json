@@ -2,6 +2,7 @@
   "name": "embedbay",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Local Vector DB Manager & Explorer",
   "scripts": {
     "dev": "cd backend && npx tauri dev",
