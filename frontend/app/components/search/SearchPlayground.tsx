@@ -628,7 +628,7 @@ export function SearchPlayground({
                       onChange={(e) =>
                         updateTab(tab.id, { searchProfileId: e.target.value })
                       }
-                      className="h-9 flex-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 text-xs text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none"
+                      className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 text-xs text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none"
                     >
                       {embeddingProfiles.length === 0 ? (
                         <option value="">No embedding profile</option>

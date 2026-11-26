@@ -68,6 +68,28 @@
   background: var(--text-muted);
 }
 
+/* Consistent custom chevron and right breathing room for all single-select dropdowns */
+select:not([multiple]):not([size]) {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right var(--select-chevron-inset, 0.5rem) center;
+  background-size: var(--select-chevron-size, 1rem) var(--select-chevron-size, 1rem);
+  padding-inline-end: var(--select-pr, 2rem);
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+select:not([multiple]):not([size]):disabled {
+  cursor: not-allowed;
+}
+
+select option {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+}
+
 dialog:modal {
   overscroll-behavior: contain;
   margin: auto;

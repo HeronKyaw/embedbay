@@ -336,7 +336,7 @@ export function SearchComparePane({ tab }: { tab: WorkspaceTab }) {
         <select
           value={connKey}
           onChange={(e) => setConnKey(e.target.value)}
-          className="h-8 rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2 text-xs text-[var(--text-primary)] focus:outline-none"
+          className="h-8 w-full min-w-0 rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2 text-xs text-[var(--text-primary)] focus:outline-none"
         >
           {connectionOptions.map((opt) => (
             <option key={opt.key} value={opt.key}>
@@ -348,7 +348,7 @@ export function SearchComparePane({ tab }: { tab: WorkspaceTab }) {
         <select
           value={collection}
           onChange={(e) => setCollection(e.target.value)}
-          className="h-8 rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2 text-xs text-[var(--text-primary)] focus:outline-none"
+          className="h-8 w-full min-w-0 rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2 text-xs text-[var(--text-primary)] focus:outline-none"
         >
           {collections.length === 0 ? (
             <option value={collection}>{collection || "No collections"}</option>

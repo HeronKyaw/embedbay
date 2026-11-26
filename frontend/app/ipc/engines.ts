@@ -98,6 +98,9 @@ export async function getStorageUsage(): Promise<StorageUsageSummary> {
       total_engine_bytes: 0,
       unused_engine_bytes: 0,
       unused_engine_count: 0,
+      stale_unused_engine_bytes: 0,
+      stale_unused_engine_count: 0,
+      unused_grace_days: 7,
       total_instance_bytes: 0,
       db_bytes: 0,
       logs_bytes: 0,
@@ -108,7 +111,9 @@ export async function getStorageUsage(): Promise<StorageUsageSummary> {
   return invoke<StorageUsageSummary>("get_storage_usage");
 }
 
-export async function cleanupUnusedEngines(): Promise<CleanupResult> {
+export async function cleanupUnusedEngines(
+  minUnusedDays?: number,
+): Promise<CleanupResult> {
   if (!isTauriRuntime()) {
     return {
       removed_count: 0,
@@ -117,7 +122,9 @@ export async function cleanupUnusedEngines(): Promise<CleanupResult> {
       skipped: [],
     };
   }
-  return invoke<CleanupResult>("cleanup_unused_engines");
+  return invoke<CleanupResult>("cleanup_unused_engines", {
+    minUnusedDays: minUnusedDays ?? null,
+  });
 }
 
 export async function compactDatabase(): Promise<VacuumResult> {

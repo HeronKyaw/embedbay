@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use tauri::State;
@@ -11,6 +12,9 @@ use crate::platform;
 use crate::supervisor::metrics::dir_size_bytes;
 use crate::AppState;
 
+pub const UNUSED_ENGINE_GRACE_DAYS: u64 = 7;
+const SECS_PER_DAY: i64 = 86_400;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct InstalledEngineStorage {
     pub id: String,
@@ -19,6 +23,10 @@ pub struct InstalledEngineStorage {
     pub binary_path: String,
     pub size_bytes: u64,
     pub in_use_by: Vec<String>,
+    pub installed_at: i64,
+    pub last_used_at: Option<i64>,
+    pub unused_days: Option<u64>,
+    pub is_stale_unused: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -36,6 +44,9 @@ pub struct StorageUsageSummary {
     pub total_engine_bytes: u64,
     pub unused_engine_bytes: u64,
     pub unused_engine_count: usize,
+    pub stale_unused_engine_bytes: u64,
+    pub stale_unused_engine_count: usize,
+    pub unused_grace_days: u64,
     pub total_instance_bytes: u64,
     pub db_bytes: u64,
     pub logs_bytes: u64,
@@ -51,13 +62,29 @@ pub struct CleanupResult {
     pub skipped: Vec<String>,
 }
 
+fn current_unix_secs() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn unused_days_for_engine(installed_at: i64, last_used_at: Option<i64>, now_secs: i64) -> u64 {
+    let since = last_used_at.unwrap_or(installed_at);
+    let elapsed = now_secs.saturating_sub(since).max(0);
+    (elapsed / SECS_PER_DAY) as u64
+}
+
 pub fn compute_storage_usage(db: &Database) -> Result<StorageUsageSummary, String> {
     let installed = db.list_installed_engines().map_err(|e| e.to_string())?;
     let all_instances = db.list_instances().map_err(|e| e.to_string())?;
+    let now_secs = current_unix_secs();
 
     let mut total_engine_bytes = 0u64;
     let mut unused_engine_bytes = 0u64;
     let mut unused_engine_count = 0usize;
+    let mut stale_unused_engine_bytes = 0u64;
+    let mut stale_unused_engine_count = 0usize;
     let mut engines = Vec::with_capacity(installed.len());
 
     for eng in installed {
@@ -78,10 +105,19 @@ pub fn compute_storage_usage(db: &Database) -> Result<StorageUsageSummary, Strin
             .collect();
 
         total_engine_bytes = total_engine_bytes.saturating_add(size_bytes);
-        if in_use_by.is_empty() {
+        let (unused_days, is_stale_unused) = if in_use_by.is_empty() {
+            let days = unused_days_for_engine(eng.installed_at, eng.last_used_at, now_secs);
+            let is_stale = days >= UNUSED_ENGINE_GRACE_DAYS;
             unused_engine_count += 1;
             unused_engine_bytes = unused_engine_bytes.saturating_add(size_bytes);
-        }
+            if is_stale {
+                stale_unused_engine_count += 1;
+                stale_unused_engine_bytes = stale_unused_engine_bytes.saturating_add(size_bytes);
+            }
+            (Some(days), is_stale)
+        } else {
+            (None, false)
+        };
 
         engines.push(InstalledEngineStorage {
             id: eng.id,
@@ -90,6 +126,10 @@ pub fn compute_storage_usage(db: &Database) -> Result<StorageUsageSummary, Strin
             binary_path: eng.binary_path,
             size_bytes,
             in_use_by,
+            installed_at: eng.installed_at,
+            last_used_at: eng.last_used_at,
+            unused_days,
+            is_stale_unused,
         });
     }
 
@@ -124,6 +164,9 @@ pub fn compute_storage_usage(db: &Database) -> Result<StorageUsageSummary, Strin
         total_engine_bytes,
         unused_engine_bytes,
         unused_engine_count,
+        stale_unused_engine_bytes,
+        stale_unused_engine_count,
+        unused_grace_days: UNUSED_ENGINE_GRACE_DAYS,
         total_instance_bytes,
         db_bytes,
         logs_bytes,
@@ -132,8 +175,12 @@ pub fn compute_storage_usage(db: &Database) -> Result<StorageUsageSummary, Strin
     })
 }
 
-pub fn cleanup_unused_engines_inner(db: &Database) -> Result<CleanupResult, String> {
+pub fn cleanup_unused_engines_inner(
+    db: &Database,
+    min_unused_days: Option<u64>,
+) -> Result<CleanupResult, String> {
     let installed = db.list_installed_engines().map_err(|e| e.to_string())?;
+    let now_secs = current_unix_secs();
     let mut removed_count = 0usize;
     let mut freed_bytes = 0u64;
     let mut removed_ids = Vec::new();
@@ -145,6 +192,13 @@ pub fn cleanup_unused_engines_inner(db: &Database) -> Result<CleanupResult, Stri
             .map_err(|e| e.to_string())?;
         if !refs.is_empty() {
             continue;
+        }
+
+        if let Some(min_days) = min_unused_days {
+            let days = unused_days_for_engine(eng.installed_at, eng.last_used_at, now_secs);
+            if days < min_days {
+                continue;
+            }
         }
 
         let engine_dir = db.bin_dir().join(&eng.engine_type).join(&eng.version);
@@ -192,8 +246,11 @@ pub fn get_storage_usage(state: State<'_, AppState>) -> Result<StorageUsageSumma
 }
 
 #[tauri::command]
-pub async fn cleanup_unused_engines(state: State<'_, AppState>) -> Result<CleanupResult, String> {
-    cleanup_unused_engines_inner(&state.db)
+pub async fn cleanup_unused_engines(
+    state: State<'_, AppState>,
+    min_unused_days: Option<u64>,
+) -> Result<CleanupResult, String> {
+    cleanup_unused_engines_inner(&state.db, min_unused_days)
 }
 
 #[tauri::command]
@@ -266,6 +323,7 @@ mod tests {
             binary_path: unused_bin.to_string_lossy().into_owned(),
             sha256: "0000".to_string(),
             installed_at: 1000,
+            last_used_at: None,
         })
         .expect("insert unused engine");
 
@@ -277,6 +335,7 @@ mod tests {
             binary_path: active_bin.to_string_lossy().into_owned(),
             sha256: "1111".to_string(),
             installed_at: 2000,
+            last_used_at: None,
         })
         .expect("insert active engine");
 
@@ -306,11 +365,13 @@ mod tests {
         let summary_before = compute_storage_usage(&db).expect("summary before");
         assert_eq!(summary_before.unused_engine_count, 1);
         assert_eq!(summary_before.unused_engine_bytes, 4096);
+        assert_eq!(summary_before.stale_unused_engine_count, 1);
+        assert_eq!(summary_before.stale_unused_engine_bytes, 4096);
         assert_eq!(summary_before.total_engine_bytes, 4096 + 8192);
         assert!(summary_before.db_bytes > 0);
         assert_eq!(summary_before.logs_bytes, 512);
 
-        let cleanup = cleanup_unused_engines_inner(&db).expect("cleanup");
+        let cleanup = cleanup_unused_engines_inner(&db, None).expect("cleanup");
         assert_eq!(cleanup.removed_count, 1);
         assert_eq!(cleanup.freed_bytes, 4096);
         assert_eq!(cleanup.removed_ids, vec!["qdrant-1.19.0".to_string()]);
@@ -321,7 +382,116 @@ mod tests {
 
         let summary_after = compute_storage_usage(&db).expect("summary after");
         assert_eq!(summary_after.unused_engine_count, 0);
+        assert_eq!(summary_after.stale_unused_engine_count, 0);
         assert_eq!(summary_after.engines.len(), 1);
         assert_eq!(summary_after.engines[0].id, "qdrant-1.20.2");
+    }
+
+    #[test]
+    fn freshly_installed_engine_is_not_marked_stale_or_cleaned_with_grace_period() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let db = Database::init(dir.path().to_path_buf()).expect("db init");
+        let now = current_unix_secs();
+
+        let fresh_dir = db.bin_dir().join("chroma").join("1.4.4");
+        let old_dir = db.bin_dir().join("qdrant").join("1.19.0");
+        std::fs::create_dir_all(&fresh_dir).expect("mkdir fresh");
+        std::fs::create_dir_all(&old_dir).expect("mkdir old");
+
+        let fresh_bin = fresh_dir.join("chroma.exe");
+        let old_bin = old_dir.join("qdrant.exe");
+        std::fs::write(&fresh_bin, vec![0x11u8; 2048]).expect("write fresh");
+        std::fs::write(&old_bin, vec![0x22u8; 4096]).expect("write old");
+
+        db.upsert_installed_engine(&InstalledEngine {
+            id: "chroma-1.4.4".to_string(),
+            engine_type: "chroma".to_string(),
+            version: "1.4.4".to_string(),
+            target_triple: "x86_64-pc-windows-msvc".to_string(),
+            binary_path: fresh_bin.to_string_lossy().into_owned(),
+            sha256: "fresh".to_string(),
+            installed_at: now,
+            last_used_at: None,
+        })
+        .expect("insert fresh");
+
+        db.upsert_installed_engine(&InstalledEngine {
+            id: "qdrant-1.19.0".to_string(),
+            engine_type: "qdrant".to_string(),
+            version: "1.19.0".to_string(),
+            target_triple: "x86_64-pc-windows-msvc".to_string(),
+            binary_path: old_bin.to_string_lossy().into_owned(),
+            sha256: "old".to_string(),
+            installed_at: now - 8 * SECS_PER_DAY,
+            last_used_at: None,
+        })
+        .expect("insert old");
+
+        let summary = compute_storage_usage(&db).expect("summary");
+        assert_eq!(summary.unused_engine_count, 2);
+        assert_eq!(summary.stale_unused_engine_count, 1);
+        assert_eq!(summary.stale_unused_engine_bytes, 4096);
+        assert_eq!(summary.unused_grace_days, UNUSED_ENGINE_GRACE_DAYS);
+
+        let cleanup =
+            cleanup_unused_engines_inner(&db, Some(UNUSED_ENGINE_GRACE_DAYS)).expect("cleanup");
+        assert_eq!(cleanup.removed_count, 1);
+        assert_eq!(cleanup.freed_bytes, 4096);
+        assert_eq!(cleanup.removed_ids, vec!["qdrant-1.19.0".to_string()]);
+
+        assert!(fresh_bin.exists());
+        assert!(!old_dir.exists());
+    }
+
+    #[test]
+    fn deleting_instance_refreshes_last_used_at_grace_period() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let db = Database::init(dir.path().to_path_buf()).expect("db init");
+        let now = current_unix_secs();
+
+        let eng_dir = db.bin_dir().join("qdrant").join("1.20.2");
+        std::fs::create_dir_all(&eng_dir).expect("mkdir engine");
+        let eng_bin = eng_dir.join("qdrant.exe");
+        std::fs::write(&eng_bin, vec![0x55u8; 1024]).expect("write bin");
+
+        db.upsert_installed_engine(&InstalledEngine {
+            id: "qdrant-1.20.2".to_string(),
+            engine_type: "qdrant".to_string(),
+            version: "1.20.2".to_string(),
+            target_triple: "x86_64-pc-windows-msvc".to_string(),
+            binary_path: eng_bin.to_string_lossy().into_owned(),
+            sha256: "abc".to_string(),
+            installed_at: now - 30 * SECS_PER_DAY,
+            last_used_at: None,
+        })
+        .expect("insert engine");
+
+        let inst = db
+            .create_instance(CreateInstancePayload {
+                name: "Temp Qdrant".to_string(),
+                description: None,
+                color: None,
+                group_id: None,
+                engine_type: "qdrant".to_string(),
+                engine_version: "1.20.2".to_string(),
+                host: Some("127.0.0.1".to_string()),
+                port: 16444,
+                grpc_port: None,
+                data_dir: None,
+                config_json: None,
+                auto_start: Some(false),
+                idle_timeout_minutes: Some(0),
+                tag_ids: None,
+            })
+            .expect("create instance");
+
+        assert!(db.delete_instance(&inst.id).expect("delete instance"));
+
+        let summary = compute_storage_usage(&db).expect("summary");
+        assert_eq!(summary.unused_engine_count, 1);
+        assert_eq!(summary.stale_unused_engine_count, 0);
+        assert_eq!(summary.engines.len(), 1);
+        assert_eq!(summary.engines[0].unused_days, Some(0));
+        assert!(!summary.engines[0].is_stale_unused);
     }
 }

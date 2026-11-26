@@ -19,7 +19,6 @@ use tauri_plugin_autostart::ManagerExt;
 use crate::db::{Database, SqliteDiagnostics};
 use crate::engines::manifest::ManifestDiagnostics;
 use crate::platform::{self, PlatformInfo};
-use crate::supervisor::metrics::InstanceStatus;
 use crate::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -36,21 +35,14 @@ pub struct AppStatus {
 #[derive(Debug, Clone, Serialize)]
 pub struct AppRuntimeDiagnostics {
     pub version: String,
-    pub tauri_version: String,
-    pub build_profile: String,
-    pub pid: u32,
     pub uptime_secs: u64,
-    pub autostart_enabled: bool,
-    pub tray_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct HostDiagnostics {
     pub os_name: String,
     pub os_version: String,
-    pub kernel_version: String,
     pub arch: String,
-    pub target_triple: String,
     pub cpu_brand: String,
     pub cpu_cores: usize,
     pub cpu_percent: f32,
@@ -61,41 +53,8 @@ pub struct HostDiagnostics {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct InstanceDiagnosticRow {
-    pub id: String,
-    pub name: String,
-    pub engine_type: String,
-    pub engine_version: String,
-    pub status: InstanceStatus,
-    pub host: String,
-    pub port: u16,
-    pub pid: Option<u32>,
-    pub ram_bytes: u64,
-    pub cpu_percent: f32,
-    pub disk_bytes: u64,
-    pub uptime_secs: u64,
-    pub restart_count: u32,
-    pub last_error: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct SupervisorDiagnostics {
-    pub total_instances: usize,
-    pub running_count: usize,
-    pub embedded_count: usize,
-    pub stopped_count: usize,
-    pub error_count: usize,
-    pub total_ram_bytes: u64,
-    pub total_cpu_percent: f32,
-    pub total_disk_bytes: u64,
-    pub total_restarts: u32,
-    pub instances: Vec<InstanceDiagnosticRow>,
-}
-
-#[derive(Debug, Clone, Serialize)]
 pub struct KeyringDiagnostics {
     pub backend_name: String,
-    pub service_name: String,
     pub stored_secret_refs: i64,
 }
 
@@ -105,14 +64,12 @@ pub struct DiagnosticPaths {
     pub db_path: String,
     pub bin_dir: String,
     pub instances_dir: String,
-    pub manifest_path: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DiagnosticsReport {
     pub app: AppRuntimeDiagnostics,
     pub host: HostDiagnostics,
-    pub supervisor: SupervisorDiagnostics,
     pub database: SqliteDiagnostics,
     pub manifest: ManifestDiagnostics,
     pub keyring: KeyringDiagnostics,
@@ -238,13 +195,8 @@ pub fn open_external_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn get_diagnostics(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<DiagnosticsReport, String> {
-    let autostart_enabled = app.autolaunch().is_enabled().unwrap_or(false);
+pub async fn get_diagnostics(state: State<'_, AppState>) -> Result<DiagnosticsReport, String> {
     let metrics_summary = state.process_manager.get_all_instance_metrics().await?;
-    let instances_list = state.db.list_instances().map_err(|e| e.to_string())?;
     let database = state.db.sqlite_diagnostics().map_err(|e| e.to_string())?;
     let manifest = state.manifest.diagnostics_info()?;
     let plat = platform::platform_info();
@@ -261,72 +213,16 @@ pub async fn get_diagnostics(
 
     let os_name = System::name().unwrap_or_else(|| plat.os.clone());
     let os_version = System::long_os_version().unwrap_or_else(|| plat.os.clone());
-    let kernel_version = System::kernel_version().unwrap_or_else(|| "-".to_string());
-
-    let mut embedded_count = 0usize;
-    let mut stopped_count = 0usize;
-    let mut error_count = 0usize;
-    let mut total_restarts = 0u32;
-    let mut instance_rows = Vec::with_capacity(instances_list.len());
-
-    for inst in instances_list {
-        let m = metrics_summary.instances.get(&inst.id);
-        let status = m.map(|x| x.status).unwrap_or(InstanceStatus::Stopped);
-        match status {
-            InstanceStatus::Embedded => embedded_count += 1,
-            InstanceStatus::Stopped => stopped_count += 1,
-            InstanceStatus::Error => error_count += 1,
-            InstanceStatus::Running | InstanceStatus::Starting | InstanceStatus::Stopping => {}
-        }
-        let restarts = m.map(|x| x.restart_count).unwrap_or(0);
-        total_restarts = total_restarts.saturating_add(restarts);
-
-        instance_rows.push(InstanceDiagnosticRow {
-            id: inst.id,
-            name: inst.name,
-            engine_type: inst.engine_type,
-            engine_version: inst.engine_version,
-            status,
-            host: inst.host,
-            port: inst.port,
-            pid: m.and_then(|x| x.pid),
-            ram_bytes: m.map(|x| x.ram_bytes).unwrap_or(0),
-            cpu_percent: m.map(|x| x.cpu_percent).unwrap_or(0.0),
-            disk_bytes: m.map(|x| x.disk_bytes).unwrap_or(0),
-            uptime_secs: m.map(|x| x.uptime_secs).unwrap_or(0),
-            restart_count: restarts,
-            last_error: m.and_then(|x| x.last_error.clone()),
-        });
-    }
-
-    let build_profile = if cfg!(debug_assertions) {
-        "debug".to_string()
-    } else {
-        "release".to_string()
-    };
-
-    let tray_mode = if state.close_to_tray.load(Ordering::SeqCst) {
-        "Minimize to System Tray (Destroy-on-Close)".to_string()
-    } else {
-        "Quit on Window Close".to_string()
-    };
 
     Ok(DiagnosticsReport {
         app: AppRuntimeDiagnostics {
             version: env!("CARGO_PKG_VERSION").to_string(),
-            tauri_version: tauri::VERSION.to_string(),
-            build_profile,
-            pid: std::process::id(),
             uptime_secs: state.started_at.elapsed().as_secs(),
-            autostart_enabled,
-            tray_mode,
         },
         host: HostDiagnostics {
             os_name,
             os_version,
-            kernel_version,
             arch: plat.arch,
-            target_triple: plat.target_triple,
             cpu_brand,
             cpu_cores: metrics_summary.host.cpu_cores,
             cpu_percent: metrics_summary.host.cpu_percent,
@@ -335,21 +231,8 @@ pub async fn get_diagnostics(
             disk_available_bytes: metrics_summary.host.disk_available_bytes,
             disk_total_bytes: metrics_summary.host.disk_total_bytes,
         },
-        supervisor: SupervisorDiagnostics {
-            total_instances: instance_rows.len(),
-            running_count: metrics_summary.running_count,
-            embedded_count,
-            stopped_count,
-            error_count,
-            total_ram_bytes: metrics_summary.total_ram_bytes,
-            total_cpu_percent: metrics_summary.total_cpu_percent,
-            total_disk_bytes: metrics_summary.total_disk_bytes,
-            total_restarts,
-            instances: instance_rows,
-        },
         keyring: KeyringDiagnostics {
             backend_name: platform::keyring_backend_name().to_string(),
-            service_name: "com.embedbay.app".to_string(),
             stored_secret_refs: database.stored_secret_refs,
         },
         database,
@@ -364,7 +247,6 @@ pub async fn get_diagnostics(
                 .join("instances")
                 .to_string_lossy()
                 .into_owned(),
-            manifest_path: state.manifest.manifest_path().to_string_lossy().into_owned(),
         },
     })
 }

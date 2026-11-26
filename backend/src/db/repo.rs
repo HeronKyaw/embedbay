@@ -75,6 +75,19 @@ fn replace_entity_tags(
     Ok(())
 }
 
+fn touch_engine_last_used_tx(
+    tx: &rusqlite::Transaction<'_>,
+    engine_type: &str,
+    version: &str,
+    ts: i64,
+) -> Result<(), DbError> {
+    tx.execute(
+        "UPDATE installed_engines SET last_used_at = ?1 WHERE engine_type = ?2 AND version = ?3",
+        params![ts, engine_type, version],
+    )?;
+    Ok(())
+}
+
 impl Database {
     // -----------------------------------------------------------------------
     // Installed Engines
@@ -83,7 +96,7 @@ impl Database {
     pub fn list_installed_engines(&self) -> Result<Vec<InstalledEngine>, DbError> {
         let conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
         let mut stmt = conn.prepare(
-            "SELECT id, engine_type, version, target_triple, binary_path, sha256, installed_at
+            "SELECT id, engine_type, version, target_triple, binary_path, sha256, installed_at, last_used_at
              FROM installed_engines
              ORDER BY engine_type ASC, installed_at DESC",
         )?;
@@ -96,6 +109,7 @@ impl Database {
                 binary_path: row.get(4)?,
                 sha256: row.get(5)?,
                 installed_at: row.get(6)?,
+                last_used_at: row.get(7)?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(DbError::from)
@@ -104,7 +118,7 @@ impl Database {
     pub fn get_installed_engine(&self, id: &str) -> Result<Option<InstalledEngine>, DbError> {
         let conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
         conn.query_row(
-            "SELECT id, engine_type, version, target_triple, binary_path, sha256, installed_at
+            "SELECT id, engine_type, version, target_triple, binary_path, sha256, installed_at, last_used_at
              FROM installed_engines
              WHERE id = ?1",
             params![id],
@@ -117,6 +131,7 @@ impl Database {
                     binary_path: row.get(4)?,
                     sha256: row.get(5)?,
                     installed_at: row.get(6)?,
+                    last_used_at: row.get(7)?,
                 })
             },
         )
@@ -131,7 +146,7 @@ impl Database {
     ) -> Result<Option<InstalledEngine>, DbError> {
         let conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
         conn.query_row(
-            "SELECT id, engine_type, version, target_triple, binary_path, sha256, installed_at
+            "SELECT id, engine_type, version, target_triple, binary_path, sha256, installed_at, last_used_at
              FROM installed_engines
              WHERE engine_type = ?1 AND version = ?2",
             params![engine_type, version],
@@ -144,6 +159,7 @@ impl Database {
                     binary_path: row.get(4)?,
                     sha256: row.get(5)?,
                     installed_at: row.get(6)?,
+                    last_used_at: row.get(7)?,
                 })
             },
         )
@@ -154,15 +170,16 @@ impl Database {
     pub fn upsert_installed_engine(&self, engine: &InstalledEngine) -> Result<(), DbError> {
         let conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
         conn.execute(
-            "INSERT INTO installed_engines (id, engine_type, version, target_triple, binary_path, sha256, installed_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "INSERT INTO installed_engines (id, engine_type, version, target_triple, binary_path, sha256, installed_at, last_used_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT(id) DO UPDATE SET
                 engine_type = excluded.engine_type,
                 version = excluded.version,
                 target_triple = excluded.target_triple,
                 binary_path = excluded.binary_path,
                 sha256 = excluded.sha256,
-                installed_at = excluded.installed_at",
+                installed_at = excluded.installed_at,
+                last_used_at = COALESCE(excluded.last_used_at, installed_engines.last_used_at)",
             params![
                 engine.id,
                 engine.engine_type,
@@ -170,7 +187,8 @@ impl Database {
                 engine.target_triple,
                 engine.binary_path,
                 engine.sha256,
-                engine.installed_at
+                engine.installed_at,
+                engine.last_used_at
             ],
         )?;
         Ok(())
@@ -570,6 +588,7 @@ impl Database {
         if !tag_ids.is_empty() {
             replace_entity_tags(&tx, "instance", &id, &tag_ids)?;
         }
+        touch_engine_last_used_tx(&tx, &payload.engine_type, &payload.engine_version, created_at)?;
         tx.commit()?;
 
         let resolved_tags = load_single_entity_tags(&conn, "instance", &id)?;
@@ -603,6 +622,7 @@ impl Database {
         let mut inst = self
             .get_instance(id)?
             .ok_or_else(|| DbError::NotFound(format!("Instance '{}' not found", id)))?;
+        let prev_version = inst.engine_version.clone();
 
         if let Some(name) = payload.name {
             let trimmed = name.trim().to_string();
@@ -682,6 +702,11 @@ impl Database {
         if let Some(tag_ids) = payload.tag_ids {
             replace_entity_tags(&tx, "instance", &inst.id, &tag_ids)?;
         }
+        if inst.engine_version != prev_version {
+            let now = now_unix_secs();
+            touch_engine_last_used_tx(&tx, &inst.engine_type, &prev_version, now)?;
+            touch_engine_last_used_tx(&tx, &inst.engine_type, &inst.engine_version, now)?;
+        }
         tx.commit()?;
 
         inst.tag_ids = load_single_entity_tags(&conn, "instance", &inst.id)?;
@@ -691,11 +716,23 @@ impl Database {
     pub fn delete_instance(&self, id: &str) -> Result<bool, DbError> {
         let mut conn = self.conn.lock().map_err(|_| DbError::LockPoisoned)?;
         let tx = conn.transaction()?;
+        let engine_ref: Option<(String, String)> = tx
+            .query_row(
+                "SELECT engine_type, engine_version FROM instances WHERE id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
         tx.execute(
             "DELETE FROM entity_tags WHERE entity_type = 'instance' AND entity_id = ?1",
             params![id],
         )?;
         let affected = tx.execute("DELETE FROM instances WHERE id = ?1", params![id])?;
+        if affected > 0 {
+            if let Some((engine_type, engine_version)) = engine_ref {
+                touch_engine_last_used_tx(&tx, &engine_type, &engine_version, now_unix_secs())?;
+            }
+        }
         tx.commit()?;
         Ok(affected > 0)
     }

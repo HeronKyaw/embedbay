@@ -50,6 +50,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "0004_app_settings",
         sql: include_str!("migrations/0004_app_settings.sql"),
     },
+    Migration {
+        version: 5,
+        name: "0005_engine_last_used",
+        sql: include_str!("migrations/0005_engine_last_used.sql"),
+    },
 ];
 
 pub struct Database {
@@ -304,7 +309,7 @@ mod tests {
         let root = dir.path().to_path_buf();
 
         let db = Database::init(root.clone()).expect("initial db init");
-        assert_eq!(db.schema_version().expect("schema version"), 4);
+        assert_eq!(db.schema_version().expect("schema version"), 5);
         assert!(root.join("app.db").exists());
         assert!(root.join("bin").is_dir());
         assert!(root.join("instances").is_dir());
@@ -347,7 +352,7 @@ mod tests {
 
         // Re-initializing on existing DB should cleanly be a no-op
         let db2 = Database::init(root).expect("idempotent db re-init");
-        assert_eq!(db2.schema_version().expect("schema version after re-init"), 4);
+        assert_eq!(db2.schema_version().expect("schema version after re-init"), 5);
     }
 
     #[test]
@@ -420,6 +425,7 @@ mod tests {
             binary_path: "C:/bin/qdrant.exe".to_string(),
             sha256: "abc123".to_string(),
             installed_at: 100,
+            last_used_at: None,
         };
         db.upsert_installed_engine(&engine).expect("upsert engine");
         assert_eq!(db.list_installed_engines().expect("list engines").len(), 1);
@@ -566,7 +572,7 @@ mod tests {
             .expect("create tag");
 
         let diag = db.sqlite_diagnostics().expect("sqlite diagnostics");
-        assert_eq!(diag.schema_version, 4);
+        assert_eq!(diag.schema_version, 5);
         assert_eq!(diag.quick_check, "ok");
         assert!(diag.journal_mode.eq_ignore_ascii_case("wal"));
         assert!(diag.foreign_keys);

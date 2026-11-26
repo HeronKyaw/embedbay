@@ -42,6 +42,9 @@
   /* Pill opacity mixing parameters for Dark Mode */
   --tag-tint-opacity: 15%;
   --tag-border-opacity: 40%;
+
+  /* Select dropdown chevron icon (matches --text-secondary #94A3B8) */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2394A3B8' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
 }
 
 [data-theme="light"],
@@ -85,6 +88,9 @@
   /* Pill opacity mixing parameters for Light Mode */
   --tag-tint-opacity: 10%;
   --tag-border-opacity: 35%;
+
+  /* Select dropdown chevron icon (matches --text-secondary #475569) */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23475569' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
 }
 
 /* Curated Group / Tag Pill Styling */

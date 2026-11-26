@@ -97,6 +97,7 @@ pub async fn install_engine(
             binary_path: "embedded".to_string(),
             sha256: "embedded".to_string(),
             installed_at: now,
+            last_used_at: None,
         };
         db.upsert_installed_engine(&record)?;
         return Ok(record);
@@ -205,6 +206,7 @@ pub async fn install_engine(
         binary_path: binary_path.to_string_lossy().into_owned(),
         sha256: computed_sha,
         installed_at: now,
+        last_used_at: None,
     };
     db.upsert_installed_engine(&record)?;
 

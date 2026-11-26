@@ -9,6 +9,7 @@ pub struct InstalledEngine {
     pub binary_path: String,
     pub sha256: String,
     pub installed_at: i64,
+    pub last_used_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

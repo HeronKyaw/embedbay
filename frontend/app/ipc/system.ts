@@ -38,7 +38,7 @@ export async function getAppStatus(): Promise<AppStatus> {
       },
       data_dir: "%LOCALAPPDATA%\\com.embedbay.app",
       db_path: "%LOCALAPPDATA%\\com.embedbay.app\\app.db",
-      schema_version: 4,
+      schema_version: 5,
       autostart_enabled: false,
       close_behavior: "tray",
     };
@@ -68,19 +68,12 @@ export async function getDiagnostics(): Promise<DiagnosticsReport> {
     return {
       app: {
         version: "0.1.0",
-        tauri_version: "2.x",
-        build_profile: "browser-preview",
-        pid: 0,
         uptime_secs: 0,
-        autostart_enabled: false,
-        tray_mode: "Destroy-on-Close (Browser Preview)",
       },
       host: {
         os_name: "Browser",
         os_version: typeof navigator !== "undefined" ? navigator.platform : "Web",
-        kernel_version: "-",
         arch: "x86_64",
-        target_triple: "browser-preview",
         cpu_brand: "WebView Host",
         cpu_cores:
           typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 4 : 4,
@@ -90,20 +83,8 @@ export async function getDiagnostics(): Promise<DiagnosticsReport> {
         disk_available_bytes: 0,
         disk_total_bytes: 0,
       },
-      supervisor: {
-        total_instances: 0,
-        running_count: 0,
-        embedded_count: 0,
-        stopped_count: 0,
-        error_count: 0,
-        total_ram_bytes: 0,
-        total_cpu_percent: 0,
-        total_disk_bytes: 0,
-        total_restarts: 0,
-        instances: [],
-      },
       database: {
-        schema_version: 3,
+        schema_version: 5,
         sqlite_version: "3.x",
         journal_mode: "wal",
         foreign_keys: true,
@@ -131,7 +112,6 @@ export async function getDiagnostics(): Promise<DiagnosticsReport> {
       },
       keyring: {
         backend_name: "OS Keyring (Browser Preview)",
-        service_name: "com.embedbay.app",
         stored_secret_refs: 0,
       },
       paths: {
@@ -139,7 +119,6 @@ export async function getDiagnostics(): Promise<DiagnosticsReport> {
         db_path: "%LOCALAPPDATA%\\com.embedbay.app\\app.db",
         bin_dir: "%LOCALAPPDATA%\\com.embedbay.app\\bin",
         instances_dir: "%LOCALAPPDATA%\\com.embedbay.app\\instances",
-        manifest_path: "%LOCALAPPDATA%\\com.embedbay.app\\manifest.json",
       },
     };
   }

@@ -51,7 +51,7 @@ const SETTINGS_CATEGORIES: readonly SettingsCategoryMeta[] = [
     id: "diagnostics",
     label: "Diagnostics",
     description:
-      "Live runtime telemetry, host specs, supervisor instances, and DB health.",
+      "System resources, local database health, credential store, and data paths.",
     icon: Cpu,
   },
   {

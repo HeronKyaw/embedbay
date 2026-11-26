@@ -25,6 +25,7 @@ import type { StorageUsageSummary } from "@/types/runtime";
 export function StoragePanel() {
   const appStatus = useAppStore((s) => s.appStatus);
   const installedCount = useRuntimeStore((s) => s.installedEngines.length);
+  const instancesCount = useRuntimeStore((s) => s.instances.length);
   const refreshCatalogAndInstalled = useRuntimeStore(
     (s) => s.refreshCatalogAndInstalled,
   );
@@ -51,7 +52,7 @@ export function StoragePanel() {
 
   React.useEffect(() => {
     void fetchUsage();
-  }, [fetchUsage, installedCount]);
+  }, [fetchUsage, installedCount, instancesCount]);
 
   const handleCopyPath = async (path: string) => {
     if (!path) return;
@@ -334,7 +335,11 @@ export function StoragePanel() {
                       In Use ({eng.in_use_by.length})
                     </Badge>
                   ) : (
-                    <Badge variant="warning">Unused</Badge>
+                    <Badge variant="warning">
+                      {eng.unused_days !== null && eng.unused_days > 0
+                        ? `Unused · ${eng.unused_days}d`
+                        : "Unused"}
+                    </Badge>
                   )}
                 </div>
                 <div className="flex items-center gap-3">

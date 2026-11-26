@@ -74,20 +74,13 @@ export interface ManifestDiagnostics {
 
 export interface AppRuntimeDiagnostics {
   version: string;
-  tauri_version: string;
-  build_profile: string;
-  pid: number;
   uptime_secs: number;
-  autostart_enabled: boolean;
-  tray_mode: string;
 }
 
 export interface HostDiagnostics {
   os_name: string;
   os_version: string;
-  kernel_version: string;
   arch: string;
-  target_triple: string;
   cpu_brand: string;
   cpu_cores: number;
   cpu_percent: number;
@@ -97,39 +90,8 @@ export interface HostDiagnostics {
   disk_total_bytes: number;
 }
 
-export interface InstanceDiagnosticRow {
-  id: string;
-  name: string;
-  engine_type: string;
-  engine_version: string;
-  status: string;
-  host: string;
-  port: number;
-  pid: number | null;
-  ram_bytes: number;
-  cpu_percent: number;
-  disk_bytes: number;
-  uptime_secs: number;
-  restart_count: number;
-  last_error: string | null;
-}
-
-export interface SupervisorDiagnostics {
-  total_instances: number;
-  running_count: number;
-  embedded_count: number;
-  stopped_count: number;
-  error_count: number;
-  total_ram_bytes: number;
-  total_cpu_percent: number;
-  total_disk_bytes: number;
-  total_restarts: number;
-  instances: InstanceDiagnosticRow[];
-}
-
 export interface KeyringDiagnostics {
   backend_name: string;
-  service_name: string;
   stored_secret_refs: number;
 }
 
@@ -138,13 +100,11 @@ export interface DiagnosticPaths {
   db_path: string;
   bin_dir: string;
   instances_dir: string;
-  manifest_path: string;
 }
 
 export interface DiagnosticsReport {
   app: AppRuntimeDiagnostics;
   host: HostDiagnostics;
-  supervisor: SupervisorDiagnostics;
   database: SqliteDiagnostics;
   manifest: ManifestDiagnostics;
   keyring: KeyringDiagnostics;

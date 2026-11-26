@@ -43,6 +43,7 @@ export interface InstalledEngine {
   binary_path: string;
   sha256: string;
   installed_at: number;
+  last_used_at?: number | null;
 }
 
 export interface InstallProgressEvent {
@@ -195,6 +196,10 @@ export interface InstalledEngineStorage {
   binary_path: string;
   size_bytes: number;
   in_use_by: string[];
+  installed_at: number;
+  last_used_at: number | null;
+  unused_days: number | null;
+  is_stale_unused: boolean;
 }
 
 export interface InstanceStorage {
@@ -210,6 +215,9 @@ export interface StorageUsageSummary {
   total_engine_bytes: number;
   unused_engine_bytes: number;
   unused_engine_count: number;
+  stale_unused_engine_bytes: number;
+  stale_unused_engine_count: number;
+  unused_grace_days: number;
   total_instance_bytes: number;
   db_bytes: number;
   logs_bytes: number;
