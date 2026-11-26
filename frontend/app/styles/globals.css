@@ -98,3 +98,56 @@ dialog::backdrop {
     margin-block-start: 6px;
   }
 }
+
+@keyframes onboard-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(28px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes onboard-slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-28px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes onboard-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.onboard-step-forward {
+  animation: onboard-slide-in-right 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.onboard-step-backward {
+  animation: onboard-slide-in-left 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.onboard-stagger {
+  animation: onboard-fade-up 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboard-step-forward,
+  .onboard-step-backward,
+  .onboard-stagger {
+    animation: none;
+  }
+}

@@ -2,6 +2,7 @@ import * as React from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { ImportExportModal } from "@/components/explorer/ImportExportModal";
 import { ExplorerWorkspace } from "@/components/explorer/ExplorerWorkspace";
+import { MigrationWizardModal } from "@/components/explorer/MigrationWizardModal";
 import { RemoteConnectionModal } from "@/components/explorer/RemoteConnectionModal";
 import { ActivityRail } from "@/components/layout/ActivityRail";
 import { AdaptiveTitlebar } from "@/components/layout/AdaptiveTitlebar";
@@ -10,11 +11,9 @@ import { StatusBar } from "@/components/layout/StatusBar";
 import { CreateInstanceModal } from "@/components/manager/CreateInstanceModal";
 import { EngineCatalog } from "@/components/manager/EngineCatalog";
 import { ServicesDashboard } from "@/components/manager/ServicesDashboard";
+import { OnboardingPage } from "@/components/onboarding/OnboardingModal";
 import { SettingsModal } from "@/components/settings/SettingsView";
-import {
-  StorageAndUpdatesPanels,
-  UnusedEngineCleanupBanner,
-} from "@/components/settings/StorageAndUpdatesPanels";
+import { UnusedEngineCleanupBanner } from "@/components/settings/StorageAndUpdatesPanels";
 import { ToastViewport, toast } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { EmbeddingScatterPlot } from "@/components/visualizer/EmbeddingScatterPlot";
@@ -27,11 +26,16 @@ import {
   useRuntimeStore,
 } from "@/stores/useRuntimeStore";
 import { useTabsStore } from "@/stores/useTabsStore";
-import type { ConnectionTarget, VectorRecord } from "@/types/explorer";
+import type {
+  CollectionSchema,
+  ConnectionTarget,
+  VectorRecord,
+} from "@/types/explorer";
 import type { InstanceRecord } from "@/types/runtime";
 
 export function App() {
   const activeSection = useAppStore((s) => s.activeSection);
+  const onboardingOpen = useAppStore((s) => s.onboardingOpen);
   const setActiveSection = useAppStore((s) => s.setActiveSection);
   const toggleSettings = useAppStore((s) => s.toggleSettings);
   const statusError = useAppStore((s) => s.statusError);
@@ -60,6 +64,15 @@ export function App() {
   const [transferSearchRecords, setTransferSearchRecords] = React.useState<
     VectorRecord[] | null
   >(null);
+  const [transferReadOnly, setTransferReadOnly] = React.useState(false);
+  const [migrateModalOpen, setMigrateModalOpen] = React.useState(false);
+  const [migrateSourceTarget, setMigrateSourceTarget] =
+    React.useState<ConnectionTarget | null>(null);
+  const [migrateSourceCollection, setMigrateSourceCollection] = React.useState<
+    string | null
+  >(null);
+  const [migrateSourceSchema, setMigrateSourceSchema] =
+    React.useState<CollectionSchema | null>(null);
 
   React.useEffect(() => {
     let active = true;
@@ -99,7 +112,11 @@ export function App() {
     });
 
     void Promise.race([bootstrapPromise, timeoutPromise]).then(() => {
-      if (active) dismissSplash();
+      if (!active) return;
+      dismissSplash();
+      if (!useAppStore.getState().onboardingCompleted) {
+        useAppStore.getState().setOnboardingOpen(true);
+      }
     });
 
     const unlisten = subscribeRuntimeEvents();
@@ -121,6 +138,7 @@ export function App() {
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (useAppStore.getState().onboardingOpen) return;
       if ((event.ctrlKey || event.metaKey) && event.key === ",") {
         event.preventDefault();
         toggleSettings();
@@ -189,68 +207,82 @@ export function App() {
       <div className="flex h-screen w-screen flex-col overflow-hidden bg-[var(--bg-canvas)] text-[var(--text-primary)]">
         <AdaptiveTitlebar />
 
-        <div className="flex min-h-0 flex-1 overflow-hidden">
-          <ActivityRail />
+        {onboardingOpen ? (
+          <OnboardingPage />
+        ) : (
+          <>
+            <div className="flex min-h-0 flex-1 overflow-hidden">
+              <ActivityRail />
 
-          <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--bg-canvas)]">
-            {statusError && (
-              <div className="m-4 rounded-lg border border-[var(--status-error)]/40 bg-[var(--status-error)]/10 px-4 py-3 text-xs text-[var(--status-error)]">
-                IPC status check error: {statusError}
-              </div>
-            )}
-
-            {activeSection === "explorer" && (
-              <ExplorerWorkspace
-                renderVisualizerButton
-                renderVisualizerTab={(tab) => (
-                  <EmbeddingScatterPlot key={tab.id} tab={tab} />
+              <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--bg-canvas)]">
+                {statusError && (
+                  <div className="m-4 rounded-lg border border-[var(--status-error)]/40 bg-[var(--status-error)]/10 px-4 py-3 text-xs text-[var(--status-error)]">
+                    IPC status check error: {statusError}
+                  </div>
                 )}
-                onOpenImportExport={(target, collection) => {
-                  setTransferTarget(target);
-                  setTransferCollection(collection);
-                  setTransferSearchRecords(null);
-                  setTransferModalOpen(true);
-                }}
-                onExportSearchResults={(records) => {
-                  setTransferTarget(null);
-                  setTransferCollection("search-results");
-                  setTransferSearchRecords(records);
-                  setTransferModalOpen(true);
-                }}
-              />
-            )}
 
-            {activeSection !== "explorer" && (
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                {activeSection === "runtimes" && (
-                  <ServicesDashboard
-                    onExploreInstance={(instanceId) => {
-                      const key = `local:${instanceId}`;
-                      setSelectedConnectionKey(key);
-                      setActiveTabId(null);
-                      setActiveSection("explorer");
-                      void refreshConnectionCollections(key, {
-                        kind: "local_instance",
-                        instance_id: instanceId,
-                      });
+                {activeSection === "explorer" && (
+                  <ExplorerWorkspace
+                    renderVisualizerButton
+                    renderVisualizerTab={(tab) => (
+                      <EmbeddingScatterPlot key={tab.id} tab={tab} />
+                    )}
+                    onOpenImportExport={(target, collection, _schema, readOnly) => {
+                      setTransferTarget(target);
+                      setTransferCollection(collection);
+                      setTransferSearchRecords(null);
+                      setTransferReadOnly(readOnly);
+                      setTransferModalOpen(true);
                     }}
-                    onBackupInstance={(inst) => void handleBackupInstance(inst)}
-                    onRestoreInstance={(inst) => void handleRestoreInstance(inst)}
+                    onOpenMigrate={(target, collection, schema) => {
+                      setMigrateSourceTarget(target);
+                      setMigrateSourceCollection(collection);
+                      setMigrateSourceSchema(schema);
+                      setMigrateModalOpen(true);
+                    }}
+                    onExportSearchResults={(records) => {
+                      setTransferTarget(null);
+                      setTransferCollection("search-results");
+                      setTransferSearchRecords(records);
+                      setTransferReadOnly(false);
+                      setTransferModalOpen(true);
+                    }}
                   />
                 )}
-                {activeSection === "store" && (
-                  <EngineCatalog
-                    storageCleanupBanner={<UnusedEngineCleanupBanner />}
-                  />
+
+                {activeSection !== "explorer" && (
+                  <div className="min-h-0 flex-1 overflow-y-auto">
+                    {activeSection === "runtimes" && (
+                      <ServicesDashboard
+                        onExploreInstance={(instanceId) => {
+                          const key = `local:${instanceId}`;
+                          setSelectedConnectionKey(key);
+                          setActiveTabId(null);
+                          setActiveSection("explorer");
+                          void refreshConnectionCollections(key, {
+                            kind: "local_instance",
+                            instance_id: instanceId,
+                          });
+                        }}
+                        onBackupInstance={(inst) => void handleBackupInstance(inst)}
+                        onRestoreInstance={(inst) => void handleRestoreInstance(inst)}
+                      />
+                    )}
+                    {activeSection === "store" && (
+                      <EngineCatalog
+                        storageCleanupBanner={<UnusedEngineCleanupBanner />}
+                      />
+                    )}
+                  </div>
                 )}
-              </div>
-            )}
-          </main>
-        </div>
+              </main>
+            </div>
 
-        <StatusBar />
+            <StatusBar />
+          </>
+        )}
 
-        <SettingsModal extraPanels={<StorageAndUpdatesPanels />} />
+        <SettingsModal />
         <CreateInstanceModal onPickDirectory={handlePickDirectory} />
         <RemoteConnectionModal />
         <ImportExportModal
@@ -259,6 +291,17 @@ export function App() {
           target={transferTarget}
           collection={transferCollection}
           searchRecords={transferSearchRecords}
+          readOnly={transferReadOnly}
+        />
+        <MigrationWizardModal
+          open={migrateModalOpen}
+          onOpenChange={setMigrateModalOpen}
+          sourceTarget={migrateSourceTarget}
+          sourceCollection={migrateSourceCollection}
+          sourceSchema={migrateSourceSchema}
+          onMigrated={(destKey, destTarget) => {
+            void refreshConnectionCollections(destKey, destTarget);
+          }}
         />
         <CommandPalette />
         <ToastViewport />
