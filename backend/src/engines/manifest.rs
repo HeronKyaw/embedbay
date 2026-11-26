@@ -345,5 +345,69 @@ mod tests {
             .expect("os");
         assert!(es.install_notice.is_some());
         assert!(os.install_notice.is_some());
+
+        let bundled: EngineManifest =
+            serde_json::from_str(BUNDLED_MANIFEST_JSON).expect("parse bundled manifest");
+        for engine in &bundled.engines {
+            for ver in &engine.versions {
+                for (target_name, target) in &ver.targets {
+                    if target.url == "embedded://local" {
+                        continue;
+                    }
+                    assert!(
+                        target.url.starts_with("https://"),
+                        "{}@{} [{}] url must use https:// (got {})",
+                        engine.engine_type,
+                        ver.version,
+                        target_name,
+                        target.url
+                    );
+                    assert!(
+                        target.sha256.len() == 64
+                            && target.sha256.chars().all(|c| c.is_ascii_hexdigit()),
+                        "{}@{} [{}] must have a valid 64-char hex sha256 (got '{}')",
+                        engine.engine_type,
+                        ver.version,
+                        target_name,
+                        target.sha256
+                    );
+                    assert!(
+                        target.size_bytes > 0,
+                        "{}@{} [{}] must have size_bytes > 0",
+                        engine.engine_type,
+                        ver.version,
+                        target_name
+                    );
+                    for (idx, extra) in target.extra_archives.iter().enumerate() {
+                        assert!(
+                            extra.url.starts_with("https://"),
+                            "{}@{} [{}] extra[{}] url must use https:// (got {})",
+                            engine.engine_type,
+                            ver.version,
+                            target_name,
+                            idx,
+                            extra.url
+                        );
+                        assert!(
+                            extra.sha256.len() == 64
+                                && extra.sha256.chars().all(|c| c.is_ascii_hexdigit()),
+                            "{}@{} [{}] extra[{}] must have a valid 64-char hex sha256",
+                            engine.engine_type,
+                            ver.version,
+                            target_name,
+                            idx
+                        );
+                        assert!(
+                            extra.size_bytes > 0,
+                            "{}@{} [{}] extra[{}] must have size_bytes > 0",
+                            engine.engine_type,
+                            ver.version,
+                            target_name,
+                            idx
+                        );
+                    }
+                }
+            }
+        }
     }
 }

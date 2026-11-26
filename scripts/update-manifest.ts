@@ -102,7 +102,10 @@ async function fetchLatestMariaDb118(): Promise<{ version: string; url: string }
           !f.file_name.includes("debugsymbols"),
       );
       if (zip?.file_download_url && rel.release_id) {
-        return { version: rel.release_id, url: zip.file_download_url };
+        return {
+          version: rel.release_id,
+          url: zip.file_download_url.replace(/^http:\/\//i, "https://"),
+        };
       }
     }
   }
