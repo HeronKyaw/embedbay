@@ -10,8 +10,8 @@ EmbedBay ships in two standard Windows installer formats:
 
 | Installer | Filename | Recommended For |
 | --- | --- | --- |
-| **NSIS Setup (`.exe`)** | `EmbedBay_0.1.2_x64-setup.exe` | Individual developers. Installs per-user (`currentUser`, no UAC elevation required), supports upgrading over an existing running tray instance, and prompts on uninstall before removing local database files. |
-| **WiX Installer (`.msi`)** | `EmbedBay_0.1.2_x64_en-US.msi` | Enterprise / scripted deployments (`msiexec /i EmbedBay_0.1.2_x64_en-US.msi /qn`), stable in-place upgrades via fixed WiX UpgradeCode, and Group Policy distribution. |
+| **NSIS Setup (`.exe`)** | `EmbedBay_0.1.3_x64-setup.exe` | Individual developers. Installs per-user (`currentUser`, no UAC elevation required), supports upgrading over an existing running tray instance, and prompts on uninstall before removing local database files. |
+| **WiX Installer (`.msi`)** | `EmbedBay_0.1.3_x64_en-US.msi` | Enterprise / scripted deployments (`msiexec /i EmbedBay_0.1.3_x64_en-US.msi /qn`), stable in-place upgrades via fixed WiX UpgradeCode, and Group Policy distribution. |
 
 > **Windows SmartScreen Note:** Public community installers are currently unsigned. If Windows SmartScreen warns on first launch, click **More info → Run anyway** after checking the SHA-256 digest from the GitHub Release.
 
