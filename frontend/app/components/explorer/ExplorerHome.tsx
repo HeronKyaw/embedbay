@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Database,
   FolderPlus,
-  Globe,
   Inbox,
   Loader2,
   Lock,
@@ -25,6 +24,7 @@ import { GroupIcon, GroupModal } from "@/components/sidebar/GroupModal";
 import { TagManagerModal } from "@/components/sidebar/TagManagerModal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EngineIcon } from "@/components/ui/engine-icon";
 import { InstanceStatusBadge } from "@/components/ui/status-badge";
 import { toast } from "@/components/ui/toast";
 import { deleteRemoteConnection } from "@/ipc/connections";
@@ -35,6 +35,7 @@ import {
   stopGroupInstances,
   stopInstance,
 } from "@/ipc/instances";
+import { isEmbeddedEngine } from "@/lib/engineVersions";
 import { formatBytes, formatRamMb } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/useAppStore";
@@ -79,7 +80,7 @@ function LocalConnectionCard({
   const status: InstanceStatus = metrics?.status ?? "stopped";
   const isRunning = status === "running";
   const isBusy = busy || status === "starting" || status === "stopping";
-  const isEmbedded = status === "embedded" || instance.engine_type === "lancedb";
+  const isEmbedded = status === "embedded" || isEmbeddedEngine(instance.engine_type);
   const isReady = isRunning || isEmbedded;
   const key = `local:${instance.id}`;
   const target: ConnectionTarget = {
@@ -130,25 +131,28 @@ function LocalConnectionCard({
     >
       <div>
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="truncate text-sm font-semibold leading-tight text-[var(--text-primary)]">
-                {instance.name}
-              </h3>
-              <InstanceStatusBadge status={status} />
-            </div>
-            <div className="mt-1.5 flex flex-wrap items-baseline gap-1.5 font-mono text-[11px] leading-none text-[var(--text-secondary)]">
-              <span className="uppercase text-[var(--accent-secondary)]">
-                {instance.engine_type} v{instance.engine_version}
-              </span>
-              {!isEmbedded && (
-                <>
-                  <span className="text-[var(--text-muted)]">·</span>
-                  <span>
-                    {instance.host}:{instance.port}
-                  </span>
-                </>
-              )}
+          <div className="flex min-w-0 flex-1 items-start gap-2.5">
+            <EngineIcon engineType={instance.engine_type} size="md" className="mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="truncate text-sm font-semibold leading-tight text-[var(--text-primary)]">
+                  {instance.name}
+                </h3>
+                <InstanceStatusBadge status={status} />
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-baseline gap-1.5 font-mono text-[11px] leading-none text-[var(--text-secondary)]">
+                <span className="uppercase text-[var(--accent-secondary)]">
+                  {instance.engine_type} v{instance.engine_version}
+                </span>
+                {!isEmbedded && (
+                  <>
+                    <span className="text-[var(--text-muted)]">·</span>
+                    <span>
+                      {instance.host}:{instance.port}
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -338,29 +342,28 @@ function RemoteConnectionCard({
     >
       <div>
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <Globe
-                className="h-3.5 w-3.5 shrink-0"
-                style={{ color: conn.color ?? "var(--accent-secondary)" }}
-              />
-              <h3 className="truncate text-sm font-semibold leading-tight text-[var(--text-primary)]">
-                {conn.name}
-              </h3>
-              <Badge variant="accent">Remote</Badge>
-              {conn.read_only && (
-                <Badge variant="warning" className="text-[10px]">
-                  <Lock className="h-2.5 w-2.5" />
-                  Read-Only
-                </Badge>
-              )}
-            </div>
-            <div className="mt-1.5 flex flex-wrap items-baseline gap-1.5 font-mono text-[11px] leading-none text-[var(--text-secondary)]">
-              <span className="uppercase text-[var(--accent-secondary)]">
-                {conn.engine_type}
-              </span>
-              <span className="text-[var(--text-muted)]">·</span>
-              <span className="truncate">{conn.endpoint_url}</span>
+          <div className="flex min-w-0 flex-1 items-start gap-2.5">
+            <EngineIcon engineType={conn.engine_type} size="md" className="mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="truncate text-sm font-semibold leading-tight text-[var(--text-primary)]">
+                  {conn.name}
+                </h3>
+                <Badge variant="accent">Remote</Badge>
+                {conn.read_only && (
+                  <Badge variant="warning" className="text-[10px]">
+                    <Lock className="h-2.5 w-2.5" />
+                    Read-Only
+                  </Badge>
+                )}
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-baseline gap-1.5 font-mono text-[11px] leading-none text-[var(--text-secondary)]">
+                <span className="uppercase text-[var(--accent-secondary)]">
+                  {conn.engine_type}
+                </span>
+                <span className="text-[var(--text-muted)]">·</span>
+                <span className="truncate">{conn.endpoint_url}</span>
+              </div>
             </div>
           </div>
 
@@ -761,7 +764,7 @@ export function ExplorerHome({
                         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
                       )}
                       <GroupIcon iconName={group.icon} color={group.color} />
-                      <span className="truncate text-xs font-semibold leading-none text-[var(--text-primary)]">
+                      <span className="truncate text-xs font-semibold leading-normal text-[var(--text-primary)]">
                         {group.name}
                       </span>
                       <span className="inline-flex h-4 min-w-[20px] items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-1.5 font-mono text-[10px] leading-none text-[var(--text-muted)]">
@@ -857,7 +860,7 @@ export function ExplorerHome({
                         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
                       )}
                       <Inbox className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
-                      <span className="truncate text-xs font-semibold leading-none text-[var(--text-secondary)]">
+                      <span className="truncate text-xs font-semibold leading-normal text-[var(--text-secondary)]">
                         Ungrouped
                       </span>
                       <span className="inline-flex h-4 min-w-[20px] items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-1.5 font-mono text-[10px] leading-none text-[var(--text-muted)]">

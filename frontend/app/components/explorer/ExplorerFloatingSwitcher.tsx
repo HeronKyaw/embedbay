@@ -11,6 +11,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { isEmbeddedEngine } from "@/lib/engineVersions";
 import { cn } from "@/lib/utils";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
 import { useTabsStore } from "@/stores/useTabsStore";
@@ -412,7 +413,7 @@ export function ExplorerFloatingSwitcher({
                   const instReady =
                     st === "running" ||
                     st === "embedded" ||
-                    inst.engine_type === "lancedb";
+                    isEmbeddedEngine(inst.engine_type);
                   const selected = connectionKey === key;
                   return (
                     <button

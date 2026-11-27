@@ -15,6 +15,7 @@ import { toast } from "@/components/ui/toast";
 import { embedTexts } from "@/ipc/connections";
 import { listCollections, searchVectors } from "@/ipc/explorer";
 import { formatUserError } from "@/lib/errors";
+import { isEmbeddedEngine } from "@/lib/engineVersions";
 import { cn } from "@/lib/utils";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
 import { useTabsStore, type WorkspaceTab } from "@/stores/useTabsStore";
@@ -92,7 +93,7 @@ export function SearchComparePane({ tab }: { tab: WorkspaceTab }) {
     const opts: ConnectionOption[] = [];
     for (const inst of instances) {
       const st = metrics[inst.id]?.status ?? "stopped";
-      const ready = st === "running" || st === "embedded" || inst.engine_type === "lancedb";
+      const ready = st === "running" || st === "embedded" || isEmbeddedEngine(inst.engine_type);
       if (!ready) continue;
       opts.push({
         key: `local:${inst.id}`,

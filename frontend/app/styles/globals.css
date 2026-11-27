@@ -90,6 +90,138 @@ select option {
   color: var(--text-primary);
 }
 
+/* Modern Customizable Select API (Edge/WebView2 135+ top-layer animated picker) */
+@supports (appearance: base-select) {
+  select:not([multiple]):not([size]),
+  select:not([multiple]):not([size])::picker(select) {
+    appearance: base-select;
+  }
+
+  select:not([multiple]):not([size]) {
+    background-image: none;
+    padding-inline-end: 0.625rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    transition:
+      border-color 150ms ease,
+      background-color 150ms ease,
+      box-shadow 150ms ease;
+  }
+
+  select:not([multiple]):not([size]) selectedcontent {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  select:not([multiple]):not([size]):hover:not(:disabled) {
+    border-color: var(--text-muted);
+    background-color: var(--bg-elevated);
+  }
+
+  select:not([multiple]):not([size]):open {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  }
+
+  select:not([multiple]):not([size])::picker-icon {
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    margin-inline-start: auto;
+    transition:
+      transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+      color 150ms ease;
+  }
+
+  select:not([multiple]):not([size]):open::picker-icon {
+    transform: rotate(180deg);
+    color: var(--accent-primary);
+  }
+
+  select:not([multiple]):not([size])::picker(select) {
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    padding: 4px;
+    margin-block: 4px;
+    min-width: anchor-size(width);
+    max-height: 280px;
+    box-shadow:
+      0 12px 28px -4px rgba(0, 0, 0, 0.45),
+      0 4px 10px -2px rgba(0, 0, 0, 0.25);
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+    transition:
+      display 160ms ease,
+      overlay 160ms ease,
+      opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition-behavior: allow-discrete;
+  }
+
+  [data-theme="light"] select:not([multiple]):not([size])::picker(select),
+  .light select:not([multiple]):not([size])::picker(select) {
+    box-shadow:
+      0 10px 24px -4px rgba(15, 23, 42, 0.14),
+      0 4px 10px -2px rgba(15, 23, 42, 0.08);
+  }
+
+  select:not([multiple]):not([size]):open::picker(select) {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  @starting-style {
+    select:not([multiple]):not([size]):open::picker(select) {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.98);
+    }
+  }
+
+  select:not([multiple]):not([size]) option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.425rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    line-height: 1.3;
+    background-color: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition:
+      background-color 120ms ease,
+      color 120ms ease;
+  }
+
+  select:not([multiple]):not([size]) option:hover,
+  select:not([multiple]):not([size]) option:focus-visible {
+    background-color: var(--bg-elevated);
+  }
+
+  select:not([multiple]):not([size]) option:checked {
+    font-weight: 600;
+    background-color: color-mix(in srgb, var(--accent-primary) 15%, transparent);
+    color: var(--accent-primary);
+  }
+
+  select:not([multiple]):not([size]) option::checkmark {
+    color: var(--accent-primary);
+    font-size: 0.75rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    select:not([multiple]):not([size])::picker(select),
+    select:not([multiple]):not([size])::picker-icon {
+      transition: none;
+    }
+  }
+}
+
 dialog:modal {
   overscroll-behavior: contain;
   margin: auto;
@@ -171,5 +303,64 @@ dialog::backdrop {
   .onboard-step-backward,
   .onboard-stagger {
     animation: none;
+  }
+}
+
+/* Purposeful micro-animations for icon buttons */
+@media (prefers-reduced-motion: no-preference) {
+  button:not(:disabled):not(.no-icon-anim) svg.lucide:not(.animate-spin) {
+    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-refresh-cw:not(.animate-spin),
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-rotate-cw:not(.animate-spin) {
+    transform: rotate(180deg);
+  }
+
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-plus {
+    transform: rotate(90deg);
+  }
+
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-download {
+    transform: translateY(1.5px);
+  }
+
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-arrow-up-circle {
+    transform: translateY(-1.5px);
+  }
+
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-arrow-right {
+    transform: translateX(2.5px);
+  }
+
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-arrow-left {
+    transform: translateX(-2.5px);
+  }
+
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-trash-2 {
+    transform: rotate(-10deg) scale(1.06);
+  }
+
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-pencil {
+    transform: rotate(-12deg) translateY(-1px);
+  }
+
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-settings {
+    transform: rotate(45deg);
+  }
+
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-play,
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-square,
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-pause,
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-copy,
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-clipboard-copy,
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-folder-open,
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-terminal,
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-archive,
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-archive-restore,
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-code-2,
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-skull,
+  button:not(:disabled):not(.no-icon-anim):hover svg.lucide-power {
+    transform: scale(1.1);
   }
 }

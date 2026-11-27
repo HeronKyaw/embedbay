@@ -1,10 +1,12 @@
-# EmbedBay Code Signing & Privacy Policy
+# EmbedBay Release Integrity, Signing & Privacy Policy
 
-## 1. Code Signing Overview & Attribution
+## 1. Release Integrity Overview
 
-Free code signing provided by [SignPath.io](https://signpath.io/), using a code signing certificate provided by the [SignPath Foundation](https://signpath.org/).
+EmbedBay is an open-source, MIT-licensed Windows desktop application built directly from public tagged commits in GitHub Actions (`.github/workflows/release-windows.yml`).
 
-> **Note on Initial Release (`v0.1.0`):** SignPath Foundation requires an already-published public open-source release in the target distribution format before reviewing an organization application. Accordingly, `v0.1.0` is published without an Authenticode signature solely to establish initial public availability; once approved by SignPath Foundation, official Windows release builds (`v0.1.1+`) will be signed automatically through SignPath.io.
+- **Windows Installers (`.exe` / `.msi`):** Currently distributed **without a commercial Authenticode certificate** (community open-source release). On first launch, Windows SmartScreen may display *"Windows protected your PC"* — click **More info → Run anyway** after verifying the SHA-256 checksum from the GitHub Release page.
+- **In-App Auto-Updater:** All self-updates delivered via `tauri-plugin-updater` are cryptographically signed with EmbedBay's Ed25519 release key and verified against `plugins.updater.pubkey` in `backend/tauri.conf.json` before installation.
+- **Engine Downloads:** Local vector database binaries downloaded through the Engine Store are fetched directly from upstream HTTPS release URLs in `manifests/engines.json` and verified against pinned SHA-256 checksums before extraction.
 
 ---
 
@@ -14,29 +16,28 @@ Free code signing provided by [SignPath.io](https://signpath.io/), using a code 
 | --- | --- | --- |
 | **Project Maintainer / Owner** | Wunna Kyaw ([@HeronKyaw](https://github.com/HeronKyaw)) | Repository administration, code review, release tagging |
 | **Committers / Reviewers** | Wunna Kyaw ([@HeronKyaw](https://github.com/HeronKyaw)) | Reviewing and merging changes into `main` |
-| **Signing Approvers** | Wunna Kyaw ([@HeronKyaw](https://github.com/HeronKyaw)) | Approving production signing requests in SignPath.io |
 
 External contributions submitted via Pull Requests are reviewed by a maintainer before merging into `main`.
 
 ---
 
-## 3. Build Provenance & Signing Pipeline
+## 3. Build Provenance
 
-- Official Windows releases are built exclusively from tagged commits on the public [`HeronKyaw/embedbay`](https://github.com/HeronKyaw/embedbay) GitHub repository via GitHub Actions (`.github/workflows/release-windows.yml`).
-- Build artifacts are never signed from local developer workstations using a SignPath certificate.
-- Production signing requests submitted from CI require explicit approver sign-off in SignPath.io before release artifacts are published.
+- Official Windows releases are built exclusively from tagged commits (`v*.*.*`) on the public [`HeronKyaw/embedbay`](https://github.com/HeronKyaw/embedbay) GitHub repository via GitHub Actions (`.github/workflows/release-windows.yml`).
+- The CI pipeline runs `cargo test --manifest-path backend/Cargo.toml`, `npm --prefix frontend test`, and `npm --prefix frontend run build` prior to packaging the NSIS and WiX MSI installers.
 
 ---
 
-## 4. Scope of Signed Artifacts
+## 4. Scope of Distributed Artifacts
 
-### Signed by EmbedBay (once enrolled with SignPath Foundation)
+### Built & Published by EmbedBay CI
 - `embedbay.exe` — Main Tauri v2 desktop application binary compiled from this repository
 - `EmbedBay_<version>_x64-setup.exe` — Windows NSIS per-user installer
 - `EmbedBay_<version>_x64_en-US.msi` — Windows WiX MSI installer
+- `latest.json` & `.sig` — Ed25519-signed Tauri auto-updater metadata
 
-### Not Bundled or Signed by EmbedBay
-EmbedBay **does not** bundle or re-sign third-party database binaries or runtimes inside its installers. Local Tier 1 engines (Qdrant, Chroma, PostgreSQL + pgvector, Meilisearch, SurrealDB, Elasticsearch, OpenSearch, MariaDB 11.8 Vector, and DuckDB + vss) are downloaded on demand by the user directly from their official upstream HTTPS release URLs listed in `manifests/engines.json`, and every download is verified against its pinned SHA-256 checksum before extraction.
+### Not Bundled by EmbedBay
+EmbedBay **does not** bundle third-party database binaries inside its installers. Local Tier 1 engines (Qdrant, Chroma, PostgreSQL + pgvector, Meilisearch, SurrealDB, Elasticsearch, OpenSearch, MariaDB 11.8 Vector, and DuckDB + vss) are downloaded on demand by the user directly from their official upstream HTTPS release URLs listed in `manifests/engines.json`, and every download is verified against its pinned SHA-256 checksum before extraction.
 
 ---
 

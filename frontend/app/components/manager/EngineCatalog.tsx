@@ -1,6 +1,5 @@
 import * as React from "react";
 import {
-  AlertTriangle,
   ArrowUpCircle,
   CheckCircle2,
   ChevronDown,
@@ -8,17 +7,22 @@ import {
   Download,
   HardDriveDownload,
   Loader2,
+  Pause,
+  Play,
   Plus,
   RefreshCw,
-  ShieldCheck,
+  Square,
   Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EngineDetailView } from "@/components/manager/EngineDetailView";
+import { InstallEngineDialog } from "@/components/manager/InstallEngineDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { EngineIcon } from "@/components/ui/engine-icon";
 import { toast } from "@/components/ui/toast";
-import { installEngine, uninstallEngine } from "@/ipc/engines";
+import { uninstallEngine } from "@/ipc/engines";
 import {
   compareVersionStrings,
   getEngineUpdateInfo,
@@ -32,383 +36,449 @@ import type { CatalogEngineView } from "@/types/runtime";
 function EngineCard({
   engine,
   updateInfo,
+  onSelectEngine,
 }: {
   engine: CatalogEngineView;
   updateInfo: EngineUpdateInfo;
+  onSelectEngine: (engineType: string) => void;
 }) {
-  const installProgress = useRuntimeStore((s) => s.installProgress);
-  const clearInstallProgress = useRuntimeStore((s) => s.clearInstallProgress);
-  const refreshCatalogAndInstalled = useRuntimeStore(
-    (s) => s.refreshCatalogAndInstalled,
-  );
+  const activeInstalls = useRuntimeStore((s) => s.activeInstalls);
+  const startEngineInstall = useRuntimeStore((s) => s.startEngineInstall);
+  const pauseInstall = useRuntimeStore((s) => s.pauseInstall);
+  const resumeInstall = useRuntimeStore((s) => s.resumeInstall);
+  const cancelInstall = useRuntimeStore((s) => s.cancelInstall);
   const openCreateInstanceModal = useRuntimeStore(
     (s) => s.openCreateInstanceModal,
+  );
+  const refreshCatalogAndInstalled = useRuntimeStore(
+    (s) => s.refreshCatalogAndInstalled,
   );
 
   const recommended =
     engine.versions.find((v) => v.recommended) ?? engine.versions[0];
-  const [selectedVersion, setSelectedVersion] = React.useState(
-    recommended?.version ?? "",
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [uninstallOpen, setUninstallOpen] = React.useState(false);
+  const [uninstallingId, setUninstallingId] = React.useState<string | null>(null);
+
+  const installedVersions = React.useMemo(
+    () => engine.versions.filter((v) => v.installed && v.installed_id),
+    [engine.versions],
   );
-  const [busyKey, setBusyKey] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    if (
-      !engine.versions.some((v) => v.version === selectedVersion) &&
-      recommended
-    ) {
-      setSelectedVersion(recommended.version);
-    }
-  }, [engine.versions, recommended, selectedVersion]);
-
-  const currentVersion =
-    engine.versions.find((v) => v.version === selectedVersion) ??
-    engine.versions[0];
-
-  const progressKey = `${engine.engine_type}-${currentVersion?.version ?? ""}`;
-  const progress = installProgress[progressKey];
-  const isInstalling = busyKey === progressKey;
+  // Show active download for any version of this engine
+  const activeInstall = React.useMemo(
+    () =>
+      Object.values(activeInstalls).find(
+        (evt) => evt.engine_type === engine.engine_type,
+      ) ?? null,
+    [activeInstalls, engine.engine_type],
+  );
+  const isInstalling = Boolean(activeInstall);
+  const isPaused = activeInstall?.stage === "paused";
+  const isInstalled = engine.versions.some((v) => v.installed);
   const isBuiltInZeroDownload =
-    engine.embedded && (currentVersion?.size_bytes ?? 0) === 0;
-  const isSelectedVersionUpdate = Boolean(
-    currentVersion &&
-      !currentVersion.installed &&
-      updateInfo.latestInstalledVersion &&
-      compareVersionStrings(
-        currentVersion.version,
-        updateInfo.latestInstalledVersion,
-      ) > 0,
-  );
-  const [confirmNoticeOpen, setConfirmNoticeOpen] = React.useState(false);
+    engine.embedded && (recommended?.size_bytes ?? 0) === 0;
 
-  const performInstall = async () => {
-    if (!currentVersion || isInstalling) return;
-    setConfirmNoticeOpen(false);
-    setBusyKey(progressKey);
-    try {
-      await installEngine(engine.engine_type, currentVersion.version);
-      await refreshCatalogAndInstalled();
-      toast.success(
-        isSelectedVersionUpdate
-          ? `${engine.display_name} updated to v${currentVersion.version}`
-          : `${engine.display_name} v${currentVersion.version} ready`,
-        isBuiltInZeroDownload
-          ? "Embedded zero-daemon runtime enabled."
-          : "SHA-256 verified and extracted cleanly.",
-      );
-    } catch (err: unknown) {
-      toast.error(
-        `Failed to install ${engine.display_name}`,
-        err instanceof Error ? err.message : String(err),
-      );
-    } finally {
-      clearInstallProgress(engine.engine_type, currentVersion.version);
-      setBusyKey(null);
-    }
+  const startVersionInstall = async (ver: string) => {
+    if (!ver || isInstalling) return;
+    const verObj = engine.versions.find((v) => v.version === ver);
+    const isBuiltIn = engine.embedded && (verObj?.size_bytes ?? 0) === 0;
+    const isUpd = Boolean(
+      verObj &&
+        !verObj.installed &&
+        updateInfo.latestInstalledVersion &&
+        compareVersionStrings(ver, updateInfo.latestInstalledVersion) > 0,
+    );
+    setPickerOpen(false);
+    await startEngineInstall({
+      engineType: engine.engine_type,
+      version: ver,
+      displayName: engine.display_name,
+      isBuiltIn,
+      isUpdate: isUpd,
+    });
   };
 
-  const handleInstall = () => {
-    if (!currentVersion || isInstalling) return;
-    if (engine.install_notice) {
-      setConfirmNoticeOpen(true);
+  const handleActionClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isInstalling || !recommended) return;
+    if (isBuiltInZeroDownload && engine.versions.length <= 1) {
+      void startVersionInstall(recommended.version);
       return;
     }
-    void performInstall();
+    setPickerOpen(true);
   };
 
-  const handleUninstall = async () => {
-    if (!currentVersion?.installed_id || isInstalling) return;
-    setBusyKey(progressKey);
+  const handleUninstallVersion = async (installedId: string, version: string) => {
+    if (uninstallingId) return;
+    setUninstallingId(installedId);
     try {
-      await uninstallEngine(currentVersion.installed_id);
+      await uninstallEngine(installedId);
       await refreshCatalogAndInstalled();
-      toast.info(
-        `Uninstalled ${engine.display_name} v${currentVersion.version}`,
-      );
+      toast.info(`Uninstalled ${engine.display_name} v${version}`);
+      if (installedVersions.length <= 1) {
+        setUninstallOpen(false);
+      }
     } catch (err: unknown) {
       toast.error(
         `Cannot uninstall ${engine.display_name}`,
         err instanceof Error ? err.message : String(err),
       );
     } finally {
-      setBusyKey(null);
+      setUninstallingId(null);
     }
   };
 
   return (
-    <div className="flex flex-col justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 transition-colors hover:border-[var(--border-strong)]">
-      <div>
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                {engine.display_name}
-              </h3>
-              {engine.runtime_kind === "embedded" || engine.embedded ? (
-                <Badge variant="accent">Embedded · 0 MB Idle</Badge>
-              ) : engine.runtime_kind === "jvm" ? (
-                <Badge
-                  variant="default"
-                  className="border-[var(--status-starting)]/40 bg-[var(--status-starting)]/10 text-[var(--status-starting)]"
-                >
-                  JVM · {engine.ram_hint ?? "~1 GB RAM"}
-                </Badge>
-              ) : engine.runtime_kind === "sql_portable" ? (
-                <Badge variant="default">SQL Portable</Badge>
-              ) : (
-                <Badge variant="default">Lightweight Native</Badge>
-              )}
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onSelectEngine(engine.engine_type)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelectEngine(engine.engine_type);
+          }
+        }}
+        className="group flex cursor-pointer flex-col justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 text-left transition-colors hover:border-[var(--border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+      >
+        <div>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <EngineIcon engineType={engine.engine_type} size="md" />
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <h3 className="text-sm font-semibold text-[var(--text-primary)] transition-colors group-hover:text-[var(--accent-primary)]">
+                  {engine.display_name}
+                </h3>
+                {engine.runtime_kind === "embedded" || engine.embedded ? (
+                  <Badge variant="accent">Embedded · 0 MB Idle</Badge>
+                ) : engine.runtime_kind === "jvm" ? (
+                  <Badge
+                    variant="default"
+                    className="border-[var(--status-starting)]/40 bg-[var(--status-starting)]/10 text-[var(--status-starting)]"
+                  >
+                    JVM · {engine.ram_hint ?? "~1 GB RAM"}
+                  </Badge>
+                ) : engine.runtime_kind === "sql_portable" ? (
+                  <Badge variant="default">SQL Portable</Badge>
+                ) : (
+                  <Badge variant="default">Lightweight Native</Badge>
+                )}
+              </div>
             </div>
-            <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">
-              {engine.description}
-            </p>
-          </div>
-          {currentVersion?.installed ? (
-            updateInfo.hasUpdateAvailable && updateInfo.recommendedVersion ? (
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-                <Badge variant="running">
+
+            {isInstalled ? (
+              updateInfo.hasUpdateAvailable && updateInfo.recommendedVersion ? (
+                <Badge variant="warning" className="shrink-0">
+                  <ArrowUpCircle className="h-3 w-3" />v
+                  {updateInfo.recommendedVersion.version} available
+                </Badge>
+              ) : (
+                <Badge variant="running" className="shrink-0">
                   <CheckCircle2 className="h-3 w-3" />
                   Installed
                 </Badge>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setSelectedVersion(updateInfo.recommendedVersion!.version)
-                  }
-                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[var(--status-starting)]/40 bg-[var(--status-starting)]/15 px-2 py-0.5 text-[11px] font-medium leading-none text-[var(--status-starting)] transition-colors hover:bg-[var(--status-starting)]/25"
-                >
-                  <ArrowUpCircle className="h-3 w-3" />v
-                  {updateInfo.recommendedVersion.version} available
-                </button>
-              </div>
+              )
             ) : (
-              <Badge variant="running" className="shrink-0">
-                <CheckCircle2 className="h-3 w-3" />
-                Installed
-              </Badge>
-            )
-          ) : (
-            updateInfo.hasUpdateAvailable && (
-              <Badge variant="warning" className="shrink-0">
-                <ArrowUpCircle className="h-3 w-3" />
-                Update Available
-              </Badge>
-            )
-          )}
-        </div>
-
-        {/* Version Picker & Metadata */}
-        {currentVersion && (
-          <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-2.5 text-[11px]">
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
-                Version
-              </label>
-              <select
-                value={currentVersion.version}
-                onChange={(e) => setSelectedVersion(e.target.value)}
-                className="mt-0.5 w-full rounded border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-1 font-mono text-xs text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-              >
-                {engine.versions.map((v) => (
-                  <option key={v.version} value={v.version}>
-                    v{v.version}
-                    {v.recommended ? " (Recommended)" : ""}
-                    {v.installed ? " ✓" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col justify-between">
-              <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
-                Download Size
-              </span>
-              <span className="font-mono text-xs text-[var(--text-primary)]">
-                {isBuiltInZeroDownload
-                  ? "Built-in (0 B)"
-                  : formatBytes(currentVersion.size_bytes)}
-              </span>
-            </div>
-            {!isBuiltInZeroDownload && currentVersion.sha256 && (
-              <div className="col-span-2 flex items-center gap-1.5 border-t border-[var(--border-subtle)] pt-1.5 text-[10px] text-[var(--text-muted)]">
-                <ShieldCheck className="h-3 w-3 shrink-0 text-[var(--accent-primary)]" />
-                <span className="truncate font-mono">
-                  SHA-256: {currentVersion.sha256}
+              recommended && (
+                <span className="shrink-0 font-mono text-[10px] text-[var(--text-muted)]">
+                  v{recommended.version}
                 </span>
-              </div>
+              )
             )}
           </div>
-        )}
 
-        {updateInfo.hasUpdateAvailable &&
-          updateInfo.recommendedVersion &&
-          updateInfo.latestInstalledVersion &&
-          !isInstalling && (
-            <div className="mt-3 flex items-start justify-between gap-2 rounded-lg border border-[var(--status-starting)]/40 bg-[var(--status-starting)]/10 p-2.5 text-[11px] leading-relaxed text-[var(--text-secondary)]">
-              <div className="flex items-start gap-2">
-                <ArrowUpCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--status-starting)]" />
-                <span>
-                  <span className="font-mono text-[var(--text-primary)]">
-                    v{updateInfo.latestInstalledVersion}
-                  </span>{" "}
-                  installed ·{" "}
-                  <span className="font-mono text-[var(--status-starting)]">
-                    v{updateInfo.recommendedVersion.version}
-                  </span>{" "}
-                  available. Installs side-by-side without affecting existing
-                  instances.
-                </span>
-              </div>
-              {currentVersion?.version !==
-                updateInfo.recommendedVersion.version && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setSelectedVersion(updateInfo.recommendedVersion!.version)
-                  }
-                  className="shrink-0 cursor-pointer rounded border border-[var(--status-starting)]/40 bg-[var(--bg-surface)] px-2 py-0.5 font-mono text-[10px] font-medium text-[var(--status-starting)] transition-colors hover:bg-[var(--status-starting)]/15"
-                >
-                  Select v{updateInfo.recommendedVersion.version}
-                </button>
-              )}
-            </div>
-          )}
+          <p className="mt-2 line-clamp-2 min-h-[2.5rem] text-xs leading-relaxed text-[var(--text-secondary)]">
+            {engine.description}
+          </p>
 
-        {/* Live Download Progress */}
-        {isInstalling && progress && (
-          <div className="mt-3 space-y-1.5 rounded-lg border border-[var(--accent-primary)]/40 bg-[var(--accent-primary)]/10 p-2.5">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="font-medium text-[var(--text-primary)]">
-                {progress.message}
-              </span>
-              <span className="font-mono text-[var(--accent-primary)]">
-                {Math.round(progress.percent)}%
-              </span>
-            </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-canvas)]">
-              <div
-                className="h-full bg-[var(--accent-primary)] transition-all duration-150"
-                style={{ width: `${Math.min(100, Math.max(2, progress.percent))}%` }}
-              />
-            </div>
-            {progress.total_bytes > 0 && (
-              <div className="font-mono text-[10px] text-[var(--text-secondary)]">
-                {formatBytes(progress.downloaded_bytes)} /{" "}
-                {formatBytes(progress.total_bytes)}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="mt-4 flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-3">
-        <span className="font-mono text-[10px] text-[var(--text-muted)]">
-          {engine.embedded
-            ? "Zero daemon"
-            : `Default port :${engine.default_port}`}
-        </span>
-        <div className="flex items-center gap-2">
-          {currentVersion?.installed ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isInstalling}
-                onClick={() => void handleUninstall()}
-              >
-                <Trash2 className="h-3.5 w-3.5 text-[var(--status-error)]" />
-                Uninstall
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => openCreateInstanceModal(engine.engine_type)}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Create Instance
-              </Button>
-            </>
-          ) : (
-            <Button
-              type="button"
-              size="sm"
-              disabled={isInstalling || !currentVersion}
-              onClick={() => void handleInstall()}
+          {/* Live Download Progress */}
+          {isInstalling && activeInstall && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="mt-3 space-y-2 rounded-lg border border-[var(--accent-primary)]/40 bg-[var(--accent-primary)]/10 p-2.5"
             >
-              {isInstalling ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : isSelectedVersionUpdate ? (
-                <ArrowUpCircle className="h-3.5 w-3.5" />
-              ) : (
-                <Download className="h-3.5 w-3.5" />
-              )}
-              {isInstalling
-                ? isSelectedVersionUpdate
-                  ? "Updating..."
-                  : "Installing..."
-                : isSelectedVersionUpdate
-                  ? isBuiltInZeroDownload
-                    ? "Update Runtime"
-                    : `Update to v${currentVersion.version}`
-                  : isBuiltInZeroDownload
-                    ? "Enable Runtime"
-                    : "One-Click Install"}
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {engine.install_notice && currentVersion && (
-        <Dialog
-          open={confirmNoticeOpen}
-          onOpenChange={setConfirmNoticeOpen}
-          title={`${isSelectedVersionUpdate ? "Before Updating" : "Before Installing"} ${engine.display_name}`}
-          description={`v${currentVersion.version} · Download size ${formatBytes(currentVersion.size_bytes)}`}
-          maxWidthClass="w-[460px]"
-        >
-          <div className="space-y-4">
-            <div className="flex items-start gap-2.5 rounded-lg border border-[var(--status-starting)]/40 bg-[var(--status-starting)]/10 p-3 text-xs leading-relaxed text-[var(--text-primary)]">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--status-starting)]" />
-              <div className="space-y-1.5">
-                <p>{engine.install_notice}</p>
-                <p className="text-[11px] text-[var(--text-secondary)]">
-                  Tip: You can override JVM heap memory per instance in Config JSON (for example,{" "}
-                  <code className="font-mono text-[var(--accent-primary)]">
-                    {`{"heap_mb": 768}`}
-                  </code>
-                  ).
-                </p>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-medium text-[var(--text-primary)]">
+                  {activeInstall.message}
+                </span>
+                <span className="font-mono text-[var(--accent-primary)]">
+                  {isPaused
+                    ? "Paused"
+                    : `${Math.round(activeInstall.percent)}%`}
+                </span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-canvas)]">
+                <div
+                  className={`h-full transition-all duration-150 ${
+                    isPaused
+                      ? "bg-[var(--status-starting)]"
+                      : "bg-[var(--accent-primary)]"
+                  }`}
+                  style={{
+                    width: `${Math.min(100, Math.max(2, activeInstall.percent))}%`,
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-[10px] text-[var(--text-secondary)]">
+                  {activeInstall.total_bytes > 0
+                    ? `${formatBytes(activeInstall.downloaded_bytes)} / ${formatBytes(activeInstall.total_bytes)}`
+                    : "Preparing..."}
+                </span>
+                {(activeInstall.stage === "downloading" ||
+                  activeInstall.stage === "paused") && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-[10px]"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void (isPaused
+                          ? resumeInstall(
+                              engine.engine_type,
+                              activeInstall.version,
+                            )
+                          : pauseInstall(
+                              engine.engine_type,
+                              activeInstall.version,
+                            ));
+                      }}
+                    >
+                      {isPaused ? (
+                        <>
+                          <Play className="h-2.5 w-2.5" />
+                          Resume
+                        </>
+                      ) : (
+                        <>
+                          <Pause className="h-2.5 w-2.5" />
+                          Pause
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-[10px] text-[var(--status-error)]"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void cancelInstall(
+                          engine.engine_type,
+                          activeInstall.version,
+                        );
+                      }}
+                    >
+                      <Square className="h-2.5 w-2.5 fill-current" />
+                      Stop
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
-            <div className="flex justify-end gap-2">
+          )}
+        </div>
+
+        {/* Uniform Card Footer */}
+        <div className="mt-4 flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-3">
+          <span className="truncate font-mono text-[10px] text-[var(--text-muted)]">
+            {isBuiltInZeroDownload
+              ? "Built-in · Zero daemon"
+              : `${recommended ? formatBytes(recommended.size_bytes) : "—"} · :${engine.default_port}${
+                  engine.versions.length > 1
+                    ? ` · ${engine.versions.length} versions`
+                    : ""
+                }`}
+          </span>
+
+          <div
+            className="flex shrink-0 items-center gap-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {isInstalled ? (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  title={`Uninstall ${engine.display_name}`}
+                  aria-label={`Uninstall ${engine.display_name}`}
+                  disabled={
+                    isInstalling ||
+                    Boolean(uninstallingId) ||
+                    installedVersions.length === 0
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setUninstallOpen(true);
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-[var(--status-error)]" />
+                </Button>
+                {updateInfo.hasUpdateAvailable && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isInstalling}
+                    onClick={handleActionClick}
+                  >
+                    <ArrowUpCircle className="h-3.5 w-3.5 text-[var(--status-starting)]" />
+                    Update
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openCreateInstanceModal(engine.engine_type);
+                  }}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Create Instance
+                </Button>
+              </>
+            ) : (
               <Button
                 type="button"
-                variant="ghost"
                 size="sm"
-                onClick={() => setConfirmNoticeOpen(false)}
+                disabled={isInstalling || !recommended}
+                onClick={handleActionClick}
               >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => void performInstall()}
-              >
-                {isSelectedVersionUpdate ? (
-                  <ArrowUpCircle className="h-3.5 w-3.5" />
+                {isInstalling ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <Download className="h-3.5 w-3.5" />
                 )}
-                {isSelectedVersionUpdate
-                  ? "Proceed with Update"
-                  : "Proceed with Install"}
+                {isInstalling
+                  ? isPaused
+                    ? "Paused"
+                    : "Installing..."
+                  : isBuiltInZeroDownload
+                    ? "Enable Runtime"
+                    : "Install"}
               </Button>
-            </div>
+            )}
           </div>
+        </div>
+      </div>
+
+      <InstallEngineDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        engine={engine}
+        updateInfo={updateInfo}
+        initialVersion={recommended?.version}
+        isInstalling={isInstalling}
+        onConfirmInstall={startVersionInstall}
+      />
+
+      {uninstallOpen && installedVersions.length > 0 && (
+        <Dialog
+          open={uninstallOpen}
+          onOpenChange={setUninstallOpen}
+          title={`Uninstall ${engine.display_name}`}
+          description="Remove locally installed runtime binaries. Existing instances using a version must be deleted first."
+          maxWidthClass="w-[460px]"
+        >
+          {installedVersions.length === 1 ? (
+            <div className="space-y-4">
+              <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
+                Are you sure you want to uninstall{" "}
+                <strong className="text-[var(--text-primary)]">
+                  {engine.display_name} v{installedVersions[0].version}
+                </strong>
+                ?
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={Boolean(uninstallingId)}
+                  onClick={() => setUninstallOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  disabled={Boolean(uninstallingId)}
+                  onClick={() =>
+                    installedVersions[0].installed_id &&
+                    void handleUninstallVersion(
+                      installedVersions[0].installed_id,
+                      installedVersions[0].version,
+                    )
+                  }
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {uninstallingId
+                    ? "Uninstalling..."
+                    : `Uninstall v${installedVersions[0].version}`}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="divide-y divide-[var(--border-subtle)] rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)]">
+                {installedVersions.map((ver) => (
+                  <div
+                    key={ver.version}
+                    className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold text-[var(--text-primary)]">
+                        v{ver.version}
+                      </span>
+                      <span className="font-mono text-[10px] text-[var(--text-muted)]">
+                        {ver.size_bytes === 0
+                          ? "Built-in"
+                          : formatBytes(ver.size_bytes)}
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      disabled={Boolean(uninstallingId)}
+                      onClick={() =>
+                        ver.installed_id &&
+                        void handleUninstallVersion(
+                          ver.installed_id,
+                          ver.version,
+                        )
+                      }
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {uninstallingId === ver.installed_id
+                        ? "Removing..."
+                        : "Uninstall"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setUninstallOpen(false)}
+                >
+                  Done
+                </Button>
+              </div>
+            </div>
+          )}
         </Dialog>
       )}
-    </div>
+    </>
   );
 }
 
@@ -430,6 +500,7 @@ function CatalogSection({
   engines,
   updateInfoByEngine,
   installedEngines,
+  onSelectEngine,
 }: {
   title: string;
   count: number;
@@ -439,6 +510,7 @@ function CatalogSection({
   engines: CatalogEngineView[];
   updateInfoByEngine: Record<string, EngineUpdateInfo>;
   installedEngines: ReturnType<typeof useRuntimeStore.getState>["installedEngines"];
+  onSelectEngine: (engineType: string) => void;
 }) {
   if (engines.length === 0) return null;
 
@@ -475,6 +547,7 @@ function CatalogSection({
                 updateInfoByEngine[engine.engine_type] ??
                 getEngineUpdateInfo(engine, installedEngines)
               }
+              onSelectEngine={onSelectEngine}
             />
           ))}
         </div>
@@ -490,14 +563,66 @@ export function EngineCatalog({
 }) {
   const catalog = useRuntimeStore((s) => s.catalog);
   const installedEngines = useRuntimeStore((s) => s.installedEngines);
-  const refreshCatalogAndInstalled = useRuntimeStore(
-    (s) => s.refreshCatalogAndInstalled,
+  const refreshCatalogFromDisk = useRuntimeStore(
+    (s) => s.refreshCatalogFromDisk,
   );
   const appStatus = useAppStore((s) => s.appStatus);
+  const selectedStoreEngine = useAppStore((s) => s.selectedStoreEngine);
+  const setSelectedStoreEngine = useAppStore((s) => s.setSelectedStoreEngine);
   const [refreshing, setRefreshing] = React.useState(false);
   const [categoryFilter, setCategoryFilter] = React.useState<string>("all");
   const [installedCollapsed, setInstalledCollapsed] = React.useState(false);
   const [availableCollapsed, setAvailableCollapsed] = React.useState(false);
+
+  const selectedEngineObj = React.useMemo(
+    () =>
+      selectedStoreEngine
+        ? catalog.find((e) => e.engine_type === selectedStoreEngine) ?? null
+        : null,
+    [catalog, selectedStoreEngine],
+  );
+
+  // Support mouse Back button (button 3), Alt+Left, BrowserBack, and popstate from Engine Detail page
+  React.useEffect(() => {
+    if (!selectedEngineObj) return;
+    if (
+      typeof window !== "undefined" &&
+      !(
+        typeof window.history.state === "object" &&
+        window.history.state !== null &&
+        (window.history.state as { embedbayStoreDetail?: boolean })
+          .embedbayStoreDetail
+      )
+    ) {
+      window.history.pushState({ embedbayStoreDetail: true }, "");
+    }
+
+    const goBack = () => setSelectedStoreEngine(null);
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 3) {
+        e.preventDefault();
+        goBack();
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "BrowserBack" || (e.altKey && e.key === "ArrowLeft")) {
+        e.preventDefault();
+        goBack();
+      }
+    };
+    const onPopState = () => {
+      goBack();
+    };
+
+    window.addEventListener("mousedown", onMouseDown, true);
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("mousedown", onMouseDown, true);
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, [selectedEngineObj, setSelectedStoreEngine]);
 
   const updateInfoByEngine = React.useMemo(() => {
     const map: Record<string, EngineUpdateInfo> = {};
@@ -545,12 +670,38 @@ export function EngineCatalog({
 
   const handleRefresh = async () => {
     setRefreshing(true);
+    const minSpin = new Promise((resolve) => window.setTimeout(resolve, 400));
     try {
-      await refreshCatalogAndInstalled();
+      const [refreshed] = await Promise.all([
+        refreshCatalogFromDisk(),
+        minSpin,
+      ]);
+      toast.success(
+        "Catalog refreshed",
+        `${refreshed.length} engine(s) verified from local manifest.`,
+      );
+    } catch (err: unknown) {
+      toast.error(
+        "Failed to refresh catalog",
+        err instanceof Error ? err.message : String(err),
+      );
     } finally {
       setRefreshing(false);
     }
   };
+
+  if (selectedEngineObj) {
+    return (
+      <EngineDetailView
+        engine={selectedEngineObj}
+        updateInfo={
+          updateInfoByEngine[selectedEngineObj.engine_type] ??
+          getEngineUpdateInfo(selectedEngineObj, installedEngines)
+        }
+        onBack={() => setSelectedStoreEngine(null)}
+      />
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 p-6">
@@ -585,7 +736,7 @@ export function EngineCatalog({
             <RefreshCw
               className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`}
             />
-            Refresh Catalog
+            {refreshing ? "Refreshing..." : "Refresh Catalog"}
           </Button>
         }
       />
@@ -659,6 +810,7 @@ export function EngineCatalog({
           engines={installedCatalog}
           updateInfoByEngine={updateInfoByEngine}
           installedEngines={installedEngines}
+          onSelectEngine={setSelectedStoreEngine}
         />
         <CatalogSection
           title="Available"
@@ -669,6 +821,7 @@ export function EngineCatalog({
           engines={availableCatalog}
           updateInfoByEngine={updateInfoByEngine}
           installedEngines={installedEngines}
+          onSelectEngine={setSelectedStoreEngine}
         />
       </div>
     </div>

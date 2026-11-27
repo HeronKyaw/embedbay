@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Boxes, Database, PackagePlus, Settings } from "lucide-react";
+import { Boxes, Database, PackagePlus, Repeat2, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/useAppStore";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
@@ -16,11 +16,13 @@ const MENU_ITEMS: readonly MenuItem[] = [
   { id: "explorer", label: "Explorer", icon: Database },
   { id: "runtimes", label: "Local Runtimes", icon: Boxes },
   { id: "store", label: "Engine Store", icon: PackagePlus },
+  { id: "migrations", label: "Migrations", icon: Repeat2 },
 ];
 
 export function ActivityRail() {
   const activeSection = useAppStore((s) => s.activeSection);
   const setActiveSection = useAppStore((s) => s.setActiveSection);
+  const setSelectedStoreEngine = useAppStore((s) => s.setSelectedStoreEngine);
   const settingsOpen = useAppStore((s) => s.settingsOpen);
   const toggleSettings = useAppStore((s) => s.toggleSettings);
   const appStatus = useAppStore((s) => s.appStatus);
@@ -40,6 +42,10 @@ export function ActivityRail() {
     if (id === "explorer" && activeSection === "explorer") {
       setSelectedConnectionKey(null);
       setActiveTabId(null);
+      return;
+    }
+    if (id === "store" && activeSection === "store") {
+      setSelectedStoreEngine(null);
       return;
     }
     setActiveSection(id);

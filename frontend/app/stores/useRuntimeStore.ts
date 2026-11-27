@@ -1,6 +1,16 @@
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
-import { listEngineCatalog, listInstalledEngines } from "@/ipc/engines";
+import { toast } from "@/components/ui/toast";
+import {
+  cancelEngineInstall,
+  installEngine,
+  listActiveInstalls,
+  listEngineCatalog,
+  listInstalledEngines,
+  pauseEngineInstall,
+  refreshEngineCatalog,
+  resumeEngineInstall,
+} from "@/ipc/engines";
 import { listGroups, listTags } from "@/ipc/groupsTags";
 import { getAllInstanceMetrics, listInstances } from "@/ipc/instances";
 import { isTauriRuntime } from "@/ipc/system";
@@ -43,6 +53,7 @@ interface RuntimeState {
   runningCount: number;
   hostMetrics: HostResourceMetrics;
   installProgress: Record<string, InstallProgressEvent>;
+  activeInstalls: Record<string, InstallProgressEvent>;
   logsByInstance: Record<string, LogEntry[]>;
   selectedConnectionKey: string | null; // e.g. "local:<id>" or "remote:<id>"
   activeLogInstanceId: string | null;
@@ -56,6 +67,17 @@ interface RuntimeState {
 
   refreshAll: () => Promise<void>;
   refreshCatalogAndInstalled: () => Promise<void>;
+  refreshCatalogFromDisk: () => Promise<CatalogEngineView[]>;
+  startEngineInstall: (opts: {
+    engineType: string;
+    version: string;
+    displayName: string;
+    isBuiltIn: boolean;
+    isUpdate: boolean;
+  }) => Promise<void>;
+  pauseInstall: (engineType: string, version: string) => Promise<void>;
+  resumeInstall: (engineType: string, version: string) => Promise<void>;
+  cancelInstall: (engineType: string, version: string) => Promise<void>;
   refreshInstances: () => Promise<void>;
   refreshGroupsAndTags: () => Promise<void>;
   setSelectedConnectionKey: (key: string | null) => void;
@@ -88,6 +110,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   runningCount: 0,
   hostMetrics: EMPTY_HOST_METRICS,
   installProgress: {},
+  activeInstalls: {},
   logsByInstance: {},
   selectedConnectionKey: null,
   activeLogInstanceId: null,
@@ -102,16 +125,28 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   refreshAll: async () => {
     set({ loading: true });
     try {
-      const [catalog, installedEngines, instances, groups, tags, summary] =
-        await Promise.all([
-          listEngineCatalog(),
-          listInstalledEngines(),
-          listInstances(),
-          listGroups(),
-          listTags(),
-          getAllInstanceMetrics(),
-        ]);
-      set({
+      const [
+        catalog,
+        installedEngines,
+        instances,
+        groups,
+        tags,
+        summary,
+        activeList,
+      ] = await Promise.all([
+        listEngineCatalog(),
+        listInstalledEngines(),
+        listInstances(),
+        listGroups(),
+        listTags(),
+        getAllInstanceMetrics(),
+        listActiveInstalls(),
+      ]);
+      const activeInstalls: Record<string, InstallProgressEvent> = {};
+      for (const item of activeList) {
+        activeInstalls[`${item.engine_type}-${item.version}`] = item;
+      }
+      set((s) => ({
         catalog,
         installedEngines,
         instances,
@@ -123,7 +158,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         totalDiskBytes: summary.total_disk_bytes,
         runningCount: summary.running_count,
         hostMetrics: summary.host,
-      });
+        activeInstalls: { ...activeInstalls, ...s.activeInstalls },
+      }));
     } finally {
       set({ loading: false });
     }
@@ -135,6 +171,121 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       listInstalledEngines(),
     ]);
     set({ catalog, installedEngines });
+  },
+
+  refreshCatalogFromDisk: async () => {
+    const [catalog, installedEngines] = await Promise.all([
+      refreshEngineCatalog(),
+      listInstalledEngines(),
+    ]);
+    set({ catalog, installedEngines });
+    return catalog;
+  },
+
+  startEngineInstall: async ({
+    engineType,
+    version,
+    displayName,
+    isBuiltIn,
+    isUpdate,
+  }) => {
+    const key = `${engineType}-${version}`;
+    if (get().activeInstalls[key]) {
+      return;
+    }
+
+    const initialEvt: InstallProgressEvent = {
+      engine_type: engineType,
+      version,
+      stage: "downloading",
+      downloaded_bytes: 0,
+      total_bytes: 0,
+      percent: 0,
+      message: isBuiltIn
+        ? `Enabling ${displayName}...`
+        : `Downloading ${displayName} v${version}...`,
+    };
+
+    set((s) => ({
+      installProgress: { ...s.installProgress, [key]: initialEvt },
+      activeInstalls: { ...s.activeInstalls, [key]: initialEvt },
+    }));
+
+    try {
+      await installEngine(engineType, version);
+      await get().refreshCatalogAndInstalled();
+      toast.success(
+        isUpdate
+          ? `${displayName} updated to v${version}`
+          : `${displayName} v${version} ready`,
+        isBuiltIn
+          ? "Embedded zero-daemon runtime enabled."
+          : "SHA-256 verified and extracted cleanly.",
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/cancelled/i.test(msg)) {
+        toast.info(`Cancelled ${displayName} v${version} download`);
+      } else {
+        toast.error(`Failed to install ${displayName}`, msg);
+      }
+    } finally {
+      get().clearInstallProgress(engineType, version);
+    }
+  },
+
+  pauseInstall: async (engineType, version) => {
+    const key = `${engineType}-${version}`;
+    await pauseEngineInstall(engineType, version);
+    set((s) => {
+      const current = s.activeInstalls[key];
+      if (!current) return s;
+      const next = {
+        ...current,
+        stage: "paused",
+        message: "Download paused",
+      };
+      return {
+        installProgress: { ...s.installProgress, [key]: next },
+        activeInstalls: { ...s.activeInstalls, [key]: next },
+      };
+    });
+  },
+
+  resumeInstall: async (engineType, version) => {
+    const key = `${engineType}-${version}`;
+    await resumeEngineInstall(engineType, version);
+    set((s) => {
+      const current = s.activeInstalls[key];
+      if (!current) return s;
+      const next = {
+        ...current,
+        stage: "downloading",
+        message: "Resuming download...",
+      };
+      return {
+        installProgress: { ...s.installProgress, [key]: next },
+        activeInstalls: { ...s.activeInstalls, [key]: next },
+      };
+    });
+  },
+
+  cancelInstall: async (engineType, version) => {
+    const key = `${engineType}-${version}`;
+    await cancelEngineInstall(engineType, version);
+    set((s) => {
+      const current = s.activeInstalls[key];
+      if (!current) return s;
+      const next = {
+        ...current,
+        stage: "cancelled",
+        message: "Cancelling download...",
+      };
+      return {
+        installProgress: { ...s.installProgress, [key]: next },
+        activeInstalls: { ...s.activeInstalls, [key]: next },
+      };
+    });
   },
 
   refreshInstances: async () => {
@@ -268,18 +419,31 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
 
   setInstallProgress: (evt) =>
-    set((s) => ({
-      installProgress: {
-        ...s.installProgress,
-        [`${evt.engine_type}-${evt.version}`]: evt,
-      },
-    })),
+    set((s) => {
+      const key = `${evt.engine_type}-${evt.version}`;
+      const nextActive = { ...s.activeInstalls };
+      if (evt.stage === "complete" || evt.stage === "cancelled") {
+        delete nextActive[key];
+      } else {
+        nextActive[key] = evt;
+      }
+      return {
+        installProgress: {
+          ...s.installProgress,
+          [key]: evt,
+        },
+        activeInstalls: nextActive,
+      };
+    }),
 
   clearInstallProgress: (engineType, version) =>
     set((s) => {
+      const key = `${engineType}-${version}`;
       const copy = { ...s.installProgress };
-      delete copy[`${engineType}-${version}`];
-      return { installProgress: copy };
+      const activeCopy = { ...s.activeInstalls };
+      delete copy[key];
+      delete activeCopy[key];
+      return { installProgress: copy, activeInstalls: activeCopy };
     }),
 }));
 

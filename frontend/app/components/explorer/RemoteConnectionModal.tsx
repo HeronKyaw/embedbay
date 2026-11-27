@@ -3,6 +3,7 @@ import { CheckCircle2, Globe, Loader2, Lock, ShieldAlert } from "lucide-react";
 import { TagPicker } from "@/components/sidebar/TagPicker";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { EngineIcon } from "@/components/ui/engine-icon";
 import { toast } from "@/components/ui/toast";
 import {
   createRemoteConnection,
@@ -191,6 +192,7 @@ export function RemoteConnectionModal() {
       onOpenChange={(next) => {
         if (!next) closeModal();
       }}
+      icon={<EngineIcon engineType={engineType} size="sm" />}
       title={editing ? `Edit Connection: ${editing.name}` : "Add Connection"}
       description="Connect to cloud or self-hosted vector databases. Secrets are stored in the OS keyring, never plaintext SQLite."
       maxWidthClass="w-[560px]"
@@ -221,7 +223,8 @@ export function RemoteConnectionModal() {
             >
               {REMOTE_ENGINES.map((eng) => (
                 <option key={eng.id} value={eng.id}>
-                  {eng.label}
+                  <EngineIcon engineType={eng.id} size="xs" />
+                  <span>{eng.label}</span>
                 </option>
               ))}
             </select>

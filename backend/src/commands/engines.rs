@@ -236,6 +236,88 @@ pub fn list_engine_catalog(state: State<'_, AppState>) -> Result<Vec<CatalogEngi
 }
 
 #[tauri::command]
+pub fn refresh_engine_catalog(state: State<'_, AppState>) -> Result<Vec<CatalogEngineView>, String> {
+    state.manifest.reload()?;
+    state
+        .manifest
+        .catalog_for_target(platform::target_triple(), &state.db)
+}
+
+#[tauri::command]
+pub fn list_active_installs(state: State<'_, AppState>) -> Vec<installer::InstallProgressEvent> {
+    state.download_manager.list_active()
+}
+
+#[tauri::command]
+pub fn pause_engine_install(
+    state: State<'_, AppState>,
+    engine_type: String,
+    version: String,
+) -> bool {
+    let key = installer::DownloadManager::key(&engine_type, &version);
+    let ok = state.download_manager.pause(&key);
+    if ok {
+        if let Some(evt) = state
+            .download_manager
+            .list_active()
+            .into_iter()
+            .find(|e| e.engine_type == engine_type && e.version == version)
+        {
+            if let Ok(val) = serde_json::to_value(evt) {
+                state.event_sink.emit_json("install-progress", val);
+            }
+        }
+    }
+    ok
+}
+
+#[tauri::command]
+pub fn resume_engine_install(
+    state: State<'_, AppState>,
+    engine_type: String,
+    version: String,
+) -> bool {
+    let key = installer::DownloadManager::key(&engine_type, &version);
+    let ok = state.download_manager.resume(&key);
+    if ok {
+        if let Some(evt) = state
+            .download_manager
+            .list_active()
+            .into_iter()
+            .find(|e| e.engine_type == engine_type && e.version == version)
+        {
+            if let Ok(val) = serde_json::to_value(evt) {
+                state.event_sink.emit_json("install-progress", val);
+            }
+        }
+    }
+    ok
+}
+
+#[tauri::command]
+pub fn cancel_engine_install(
+    state: State<'_, AppState>,
+    engine_type: String,
+    version: String,
+) -> bool {
+    let key = installer::DownloadManager::key(&engine_type, &version);
+    let ok = state.download_manager.cancel(&key);
+    if ok {
+        if let Some(evt) = state
+            .download_manager
+            .list_active()
+            .into_iter()
+            .find(|e| e.engine_type == engine_type && e.version == version)
+        {
+            if let Ok(val) = serde_json::to_value(evt) {
+                state.event_sink.emit_json("install-progress", val);
+            }
+        }
+    }
+    ok
+}
+
+#[tauri::command]
 pub fn list_installed_engines(state: State<'_, AppState>) -> Result<Vec<InstalledEngine>, String> {
     state.db.list_installed_engines().map_err(|e| e.to_string())
 }
@@ -264,10 +346,11 @@ pub async fn install_engine(
     engine_type: String,
     version: String,
 ) -> Result<InstalledEngine, String> {
-    installer::install_engine(
+    installer::install_engine_managed(
         &state.db,
         &state.manifest,
         Some(state.event_sink.as_ref()),
+        Some(state.download_manager.as_ref()),
         &engine_type,
         &version,
     )

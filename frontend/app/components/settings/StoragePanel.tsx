@@ -35,11 +35,17 @@ export function StoragePanel() {
   const [cleaning, setCleaning] = React.useState(false);
   const [compacting, setCompacting] = React.useState(false);
 
-  const fetchUsage = React.useCallback(async () => {
+  const fetchUsage = React.useCallback(async (manual = false) => {
     setLoading(true);
+    const minSpin = manual
+      ? new Promise((resolve) => window.setTimeout(resolve, 400))
+      : Promise.resolve();
     try {
-      const next = await getStorageUsage();
+      const [next] = await Promise.all([getStorageUsage(), minSpin]);
       setUsage(next);
+      if (manual) {
+        toast.success("Storage usage refreshed");
+      }
     } catch (err: unknown) {
       toast.error(
         "Failed to inspect storage",
@@ -196,7 +202,7 @@ export function StoragePanel() {
             variant="outline"
             size="sm"
             disabled={loading}
-            onClick={() => void fetchUsage()}
+            onClick={() => void fetchUsage(true)}
           >
             <RefreshCw
               className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}

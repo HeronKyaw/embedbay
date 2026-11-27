@@ -45,6 +45,9 @@ jobs:
       - name: Run Rust backend tests
         run: cargo test --manifest-path backend/Cargo.toml
 
+      - name: Run frontend UI & IPC tests
+        run: npm --prefix frontend test
+
       - name: Build frontend assets
         run: npm --prefix frontend run build
 
@@ -70,7 +73,7 @@ jobs:
             Requires Windows 10/11 (`x86_64`) and Microsoft Edge WebView2 Runtime.
 
             ---
-            **Code Signing & Privacy:** Free open-source code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). Zero telemetry; see [CODE_SIGNING_POLICY.md](https://github.com/HeronKyaw/embedbay/blob/main/CODE_SIGNING_POLICY.md) for signing provenance, initial release notes, and privacy details.
+            **Integrity & Privacy:** Installers are built directly from this tagged commit via GitHub Actions. If Windows SmartScreen warns on first launch (unsigned community build), click **More info → Run anyway**. In-app updates are Ed25519-verified and engine binaries are SHA-256-verified. Zero telemetry; see [CODE_SIGNING_POLICY.md](https://github.com/HeronKyaw/embedbay/blob/main/CODE_SIGNING_POLICY.md).
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true

@@ -13,6 +13,7 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use tauri_plugin_autostart::MacosLauncher;
 
 use crate::db::Database;
+use crate::engines::installer::DownloadManager;
 use crate::engines::manifest::ManifestService;
 use crate::supervisor::logs::InstanceLogStore;
 use crate::supervisor::process_manager::ProcessManager;
@@ -29,6 +30,7 @@ impl EventSink for TauriEventSink {
 pub struct AppState {
     pub db: Arc<Database>,
     pub manifest: Arc<ManifestService>,
+    pub download_manager: Arc<DownloadManager>,
     pub logs: Arc<InstanceLogStore>,
     pub process_manager: Arc<ProcessManager>,
     pub event_sink: Arc<dyn EventSink>,
@@ -94,6 +96,7 @@ pub fn run() {
             app.manage(AppState {
                 db,
                 manifest,
+                download_manager: Arc::new(DownloadManager::default()),
                 logs,
                 process_manager,
                 event_sink,
@@ -120,7 +123,12 @@ pub fn run() {
             commands::open_data_path,
             commands::open_external_url,
             commands::engines::list_engine_catalog,
+            commands::engines::refresh_engine_catalog,
             commands::engines::list_installed_engines,
+            commands::engines::list_active_installs,
+            commands::engines::pause_engine_install,
+            commands::engines::resume_engine_install,
+            commands::engines::cancel_engine_install,
             commands::engines::get_storage_usage,
             commands::engines::cleanup_unused_engines,
             commands::engines::compact_database,

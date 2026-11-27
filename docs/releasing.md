@@ -25,26 +25,16 @@ EmbedBay ships `tauri-plugin-updater` configured in `backend/tauri.conf.json`. *
 
 ---
 
-## 2. Optional Windows Authenticode Code Signing
+## 2. Windows Authenticode Code Signing (Optional)
 
-Without an Authenticode signature, Windows SmartScreen warns users on first launch.
+Without an Authenticode certificate, Windows SmartScreen displays a first-launch warning on unsigned community builds (**More info → Run anyway**).
 
-### Option A: SignPath Foundation (Free for Open Source — Recommended)
+### Current Community Distribution (Unsigned Installers + Ed25519 Updater)
 
-EmbedBay uses the [MIT License](../LICENSE) and documents its build provenance and zero-telemetry guarantee in [CODE_SIGNING_POLICY.md](../CODE_SIGNING_POLICY.md) to qualify for free open-source Authenticode signing via [SignPath Foundation](https://signpath.org/):
+- Public Windows installers (`EmbedBay_<ver>_x64-setup.exe` and `EmbedBay_<ver>_x64_en-US.msi`) are built directly from tagged commits in GitHub Actions without a commercial Authenticode certificate.
+- In-app self-updates remain cryptographically verified via Tauri's Ed25519 updater keypair (`TAURI_SIGNING_PRIVATE_KEY` / `plugins.updater.pubkey`).
 
-1. **Publish an initial public release (`v0.1.0`):** SignPath Foundation requires an already-published open-source release in the target distribution format (`.exe` / `.msi`) before reviewing an application.
-2. **Apply at [`https://signpath.org/apply`](https://signpath.org/apply):** Reference `https://github.com/HeronKyaw/embedbay`, `LICENSE`, `CODE_SIGNING_POLICY.md`, and the published `v0.1.0` release.
-3. **Configure GitHub Secrets (once approved):**
-   - `SIGNPATH_API_TOKEN`
-   - `SIGNPATH_ORG_ID`
-   - `SIGNPATH_PROJECT_SLUG`
-4. **CI Order of Operations with `tauri-plugin-updater`:** Because SignPath signs artifacts asynchronously via `signpath/github-action-submit-signing-request` rather than a local `signtool` command, the CI pipeline for `v0.1.1+` must follow this sequence:
-   1. Build unsigned Windows installers (`.exe` / `.msi`) via Tauri.
-   2. Upload and submit the installers to `signpath/github-action-submit-signing-request` and download the SignPath-signed installers.
-   3. Generate Tauri updater `.sig` files and `latest.json` against the **SignPath-signed** installers using `TAURI_SIGNING_PRIVATE_KEY` (`tauri signer sign`), then upload everything to the GitHub Release.
-
-### Option B: Commercial Certificate or Azure Artifact Signing
+### Optional: Commercial Certificate or Azure Artifact Signing
 
 1. Obtain an EV / OV code-signing certificate or Azure Artifact Signing setup.
 2. Store certificate secrets (`WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD`, or Azure credentials) in GitHub Secrets.
@@ -57,11 +47,11 @@ EmbedBay uses the [MIT License](../LICENSE) and documents its build provenance a
 The workflow triggers automatically on version tags matching `v*.*.*` (or manually via `workflow_dispatch`):
 
 1. Checks out the repository and installs Node 22 + Rust (`x86_64-pc-windows-msvc`).
-2. Runs `cargo test --manifest-path backend/Cargo.toml` and `npm --prefix frontend run build`.
+2. Runs `cargo test --manifest-path backend/Cargo.toml`, `npm --prefix frontend test`, and `npm --prefix frontend run build`.
 3. Executes `tauri-apps/tauri-action@v0` targeting `projectPath: backend` with `includeUpdaterJson: true`.
 4. Uploads `EmbedBay_<ver>_x64-setup.exe`, `EmbedBay_<ver>_x64_en-US.msi`, `.sig` updater signatures, and `latest.json` into a **draft GitHub Release**.
 
-Ensure the version in `package.json`, `frontend/package.json`, `backend/Cargo.toml`, and `backend/tauri.conf.json` matches the git tag (e.g., `0.1.0` for `v0.1.0`).
+Ensure the version in `package.json`, `frontend/package.json`, `backend/Cargo.toml`, and `backend/tauri.conf.json` matches the git tag (e.g., `0.1.1` for `v0.1.1`).
 
 ---
 

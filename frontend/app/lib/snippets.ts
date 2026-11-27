@@ -1,6 +1,6 @@
 import type { FilterSpec } from "@/types/explorer";
 
-export type SnippetLang = "python" | "typescript" | "curl" | "sql";
+export type SnippetLang = "python" | "typescript" | "csharp" | "curl" | "sql";
 
 export interface CodeSnippet {
   id: SnippetLang;
@@ -66,6 +66,21 @@ function formatVectorJson(vec?: number[]): string {
   return JSON.stringify(vec.map((n) => Number(n.toFixed(6))));
 }
 
+function formatVectorCSharp(vec?: number[]): string {
+  if (!vec || vec.length === 0) {
+    return "new float[] { 0.1f, 0.2f, 0.3f }";
+  }
+  if (vec.length <= 8) {
+    const items = vec.map((n) => `${Number(n.toFixed(6))}f`).join(", ");
+    return `new float[] { ${items} }`;
+  }
+  const head = vec
+    .slice(0, 6)
+    .map((n) => `${Number(n.toFixed(6))}f`)
+    .join(", ");
+  return `new float[] { ${head} } /* ... (${vec.length} dims total) */`;
+}
+
 function buildFilterObj(filter?: FilterSpec | null): unknown | null {
   if (!filter) return null;
   if (filter.mode === "raw_json") {
@@ -128,6 +143,25 @@ console.log(res.rows);
 await client.end();`,
       },
       {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `// dotnet add package Npgsql Pgvector
+using Npgsql;
+
+var connString = Environment.GetEnvironmentVariable("PGVECTOR_URL") ?? "${dsn}";
+var builder = new NpgsqlDataSourceBuilder(connString);
+builder.UseVector();
+await using var dataSource = builder.Build();
+
+await using var cmd = dataSource.CreateCommand(
+    "SELECT tablename FROM pg_tables WHERE schemaname = 'public';");
+await using var reader = await cmd.ExecuteReaderAsync();
+while (await reader.ReadAsync())
+{
+    Console.WriteLine(reader.GetString(0));
+}`,
+      },
+      {
         id: "sql",
         label: "psql / SQL",
         code: `# Connect with psql
@@ -161,6 +195,19 @@ print(db.table_names())`,
 
 const db = await lancedb.connect("${dir.replace(/\\/g, "/")}");
 console.log(await db.tableNames());`,
+      },
+      {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `// LanceDB uses Apache Arrow IPC / Lance format on disk:
+// "${dir.replace(/\\/g, "\\\\")}"
+// Access via a lightweight Python/Node microservice or DuckDB.NET with the lance extension:
+// dotnet add package DuckDB.NET.Data.Full
+using DuckDB.NET.Data;
+
+using var conn = new DuckDBConnection("Data Source=:memory:");
+await conn.OpenAsync();
+Console.WriteLine("Connected to embedded LanceDB data dir: ${dir.replace(/\\/g, "/")}");`,
       },
     ];
   }
@@ -199,6 +246,17 @@ const client = new ChromaClient({
 console.log(await client.listCollections());`,
       },
       {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `using System.Net.Http.Headers;
+using System.Net.Http.Json;
+
+using var http = new HttpClient { BaseAddress = new Uri("${url}") };${authNote ? '\nhttp.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Environment.GetEnvironmentVariable("CHROMA_API_KEY") ?? "<YOUR_API_KEY>");' : ""}
+var collections = await http.GetFromJsonAsync<object>(
+    "/api/v2/tenants/default_tenant/databases/default_database/collections");
+Console.WriteLine(collections);`,
+      },
+      {
         id: "curl",
         label: "cURL",
         code: `curl -s "${url}/api/v2/tenants/default_tenant/databases/default_database/collections"${authNote ? ' \\\n  -H "Authorization: Bearer <YOUR_API_KEY>"' : ""}`,
@@ -228,6 +286,18 @@ const pc = new Pinecone({
 });
 const index = pc.index("<INDEX_NAME>", "${url}");
 console.log(await index.describeIndexStats());`,
+      },
+      {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `// dotnet add package Pinecone.Client
+using Pinecone;
+
+var apiKey = Environment.GetEnvironmentVariable("PINECONE_API_KEY") ?? "<YOUR_API_KEY>";
+var pinecone = new PineconeClient(apiKey);
+var index = pinecone.Index(host: "${url}");
+var stats = await index.DescribeIndexStatsAsync(new DescribeIndexStatsRequest());
+Console.WriteLine(stats);`,
       },
       {
         id: "curl",
@@ -269,6 +339,16 @@ const client = await weaviate.connectToCustom({
 console.log(await client.collections.listAll());`,
       },
       {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `using System.Net.Http.Headers;
+using System.Net.Http.Json;
+
+using var http = new HttpClient { BaseAddress = new Uri("${url}") };${authNote ? '\nhttp.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Environment.GetEnvironmentVariable("WEAVIATE_API_KEY") ?? "<YOUR_API_KEY>");' : ""}
+var schema = await http.GetFromJsonAsync<object>("/v1/schema");
+Console.WriteLine(schema);`,
+      },
+      {
         id: "curl",
         label: "cURL",
         code: `curl -s "${url}/v1/schema"${authNote ? ' \\\n  -H "Authorization: Bearer <YOUR_API_KEY>"' : ""}`,
@@ -298,6 +378,19 @@ const client = new MilvusClient({
   address: "${url}",${authNote ? '\n  token: process.env.MILVUS_TOKEN ?? "<YOUR_API_KEY>",' : ""}
 });
 console.log(await client.listCollections());`,
+      },
+      {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `// dotnet add package Milvus.Client
+using Milvus.Client;
+
+using var client = new MilvusClient(new Uri("${url}")${authNote ? ', apiKey: Environment.GetEnvironmentVariable("MILVUS_TOKEN") ?? "<YOUR_API_KEY>"' : ""});
+var collections = await client.ShowCollectionsAsync();
+foreach (var col in collections)
+{
+    Console.WriteLine(col.Name);
+}`,
       },
       {
         id: "curl",
@@ -333,6 +426,17 @@ const client = new Client({
 console.log(await client.info());`,
       },
       {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `// dotnet add package Elastic.Clients.Elasticsearch
+using Elastic.Clients.Elasticsearch;${authNote ? "\nusing Elastic.Transport;" : ""}
+
+var settings = new ElasticsearchClientSettings(new Uri("${url}"))${authNote ? '\n    .Authentication(new ApiKey(Environment.GetEnvironmentVariable("ELASTIC_API_KEY") ?? "<YOUR_API_KEY>"))' : ""};
+var client = new ElasticsearchClient(settings);
+var info = await client.InfoAsync();
+Console.WriteLine(info.Name);`,
+      },
+      {
         id: "curl",
         label: "cURL",
         code: `curl -s "${url}/_cat/indices?format=json"${authNote ? ' \\\n  -H "Authorization: ApiKey <YOUR_API_KEY>"' : ""}`,
@@ -361,6 +465,18 @@ const client = createClient({
 });
 await client.connect();
 console.log(await client.sendCommand(["FT._LIST"]));`,
+      },
+      {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `// dotnet add package StackExchange.Redis
+using StackExchange.Redis;
+
+var connStr = Environment.GetEnvironmentVariable("REDIS_URL") ?? "${url.replace(/^redis:\/\//, "")}";
+using var mux = await ConnectionMultiplexer.ConnectAsync(connStr);
+var db = mux.GetDatabase();
+var res = await db.ExecuteAsync("FT._LIST");
+Console.WriteLine(res);`,
       },
       {
         id: "curl",
@@ -394,6 +510,17 @@ const client = new MeiliSearch({
 console.log(await client.getIndexes());`,
       },
       {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `// dotnet add package Meilisearch
+using Meilisearch;
+
+var client = new MeilisearchClient(
+    "${url}"${authNote ? ',\n    Environment.GetEnvironmentVariable("MEILI_MASTER_KEY") ?? "<YOUR_MASTER_KEY>"' : ""});
+var indexes = await client.GetAllIndexesAsync();
+Console.WriteLine(indexes.Results.Count);`,
+      },
+      {
         id: "curl",
         label: "cURL",
         code: `curl -s "${url}/indexes"${authNote ? ' \\\n  -H "Authorization: Bearer <YOUR_MASTER_KEY>"' : ""}`,
@@ -423,6 +550,18 @@ await db.connect("${url}/rpc");
 await db.signin({ username: "root", password: "root" });
 await db.use({ namespace: "embedbay", database: "default" });
 console.log(await db.query("INFO FOR DB;"));`,
+      },
+      {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `// dotnet add package SurrealDb.Net
+using SurrealDb.Net;
+
+using var db = new SurrealDbClient("${url}");
+await db.SignIn(new RootAuth { Username = "root", Password = "root" });
+await db.Use("embedbay", "default");
+var res = await db.RawQuery("INFO FOR DB;");
+Console.WriteLine(res);`,
       },
       {
         id: "curl",
@@ -461,6 +600,20 @@ const db = new Database("${dbFile.replace(/\\/g, "/")}");
 sqliteVec.load(db);
 console.log(db.prepare("SELECT name FROM _embedbay_collections;").all());`,
       },
+      {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `// dotnet add package Microsoft.Data.Sqlite
+using Microsoft.Data.Sqlite;
+
+using var conn = new SqliteConnection(@"Data Source=${dbFile}");
+conn.Open();
+conn.LoadExtension("vec0");
+using var cmd = conn.CreateCommand();
+cmd.CommandText = "SELECT name FROM _embedbay_collections;";
+using var reader = cmd.ExecuteReader();
+while (reader.Read()) Console.WriteLine(reader.GetString(0));`,
+      },
     ];
   }
 
@@ -481,6 +634,17 @@ print(client.info())`,
 
 const client = new Client({ node: "${url}" });
 console.log(await client.info());`,
+      },
+      {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `// dotnet add package OpenSearch.Client
+using OpenSearch.Client;
+
+var settings = new ConnectionSettings(new Uri("${url}"));
+var client = new OpenSearchClient(settings);
+var info = await client.RootNodeInfoAsync();
+Console.WriteLine(info.Name);`,
       },
       {
         id: "curl",
@@ -517,6 +681,20 @@ console.log(await conn.query("SHOW TABLES;"));
 await conn.end();`,
       },
       {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `// dotnet add package MySqlConnector
+using MySqlConnector;
+
+await using var conn = new MySqlConnection(
+    Environment.GetEnvironmentVariable("MARIADB_URL")
+    ?? "Server=127.0.0.1;Port=${ctx.port ?? 3306};User ID=root;Database=embedbay");
+await conn.OpenAsync();
+await using var cmd = new MySqlCommand("SHOW TABLES;", conn);
+await using var reader = await cmd.ExecuteReaderAsync();
+while (await reader.ReadAsync()) Console.WriteLine(reader.GetString(0));`,
+      },
+      {
         id: "sql",
         label: "SQL",
         code: `-- Connect via mariadb CLI
@@ -548,6 +726,19 @@ print(con.execute("SELECT name, dimensions, distance_metric FROM _embedbay_colle
 const instance = await DuckDBInstance.create("${dbFile.replace(/\\/g, "/")}");
 const conn = await instance.connect();
 console.log(await (await conn.run("SELECT * FROM _embedbay_collections;")).getRowObjects());`,
+      },
+      {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `// dotnet add package DuckDB.NET.Data.Full
+using DuckDB.NET.Data;
+
+using var conn = new DuckDBConnection(@"Data Source=${dbFile}");
+await conn.OpenAsync();
+using var cmd = conn.CreateCommand();
+cmd.CommandText = "SELECT name, dimensions, distance_metric FROM _embedbay_collections;";
+using var reader = await cmd.ExecuteReaderAsync();
+while (await reader.ReadAsync()) Console.WriteLine(reader.GetString(0));`,
       },
       {
         id: "sql",
@@ -584,6 +775,20 @@ const client = new QdrantClient({
 console.log(await client.getCollections());`,
     },
     {
+      id: "csharp",
+      label: "C# (.NET)",
+      code: `// dotnet add package Qdrant.Client
+using Qdrant.Client;
+
+var uri = new Uri("${url}");
+using var client = new QdrantClient(
+    host: uri.Host,
+    port: uri.Port == 6333 ? 6334 : uri.Port,
+    https: uri.Scheme == "https"${authNote ? ',\n    apiKey: Environment.GetEnvironmentVariable("QDRANT_API_KEY") ?? "<YOUR_API_KEY>"' : ""});
+var collections = await client.ListCollectionsAsync();
+foreach (var name in collections) Console.WriteLine(name);`,
+    },
+    {
       id: "curl",
       label: "cURL",
       code: `curl -s "${url}/collections"${authNote ? ' \\\n  -H "api-key: <YOUR_API_KEY>"' : ""}`,
@@ -599,6 +804,7 @@ export function generateSearchSnippets(
   const authNote = ctx.hasAuth;
   const vecPy = formatVectorLiteral(ctx.queryVector);
   const vecJson = formatVectorJson(ctx.queryVector);
+  const vecCs = formatVectorCSharp(ctx.queryVector);
   const filterObj = buildFilterObj(ctx.filter);
   const filterJson = filterObj ? JSON.stringify(filterObj, null, 2) : null;
   const queryComment = ctx.queryText?.trim()
@@ -658,6 +864,29 @@ console.log(res.rows);
 await client.end();`,
       },
       {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `${tsQueryComment}// dotnet add package Npgsql Pgvector
+using Npgsql;
+using Pgvector;
+
+var builder = new NpgsqlDataSourceBuilder(
+    Environment.GetEnvironmentVariable("PGVECTOR_URL") ?? "${dsn}");
+builder.UseVector();
+await using var dataSource = builder.Build();
+
+var queryVector = new Vector(${vecCs});
+await using var cmd = dataSource.CreateCommand(
+    @"SELECT id, metadata, document, 1 - (embedding <=> $1) AS score
+      FROM ""${ctx.collection}""
+      ORDER BY embedding <=> $1 ASC
+      LIMIT $2");
+cmd.Parameters.AddWithValue(queryVector);
+cmd.Parameters.AddWithValue(${ctx.topK});
+await using var reader = await cmd.ExecuteReaderAsync();
+while (await reader.ReadAsync()) Console.WriteLine($"{reader["id"]}: {reader["score"]}");`,
+      },
+      {
         id: "sql",
         label: "psql / SQL",
         code: `-- Search "${ctx.collection}" via cosine distance
@@ -700,6 +929,22 @@ const results = await collection.query({
 console.log(results);`,
       },
       {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `${tsQueryComment}using System.Net.Http.Json;
+
+using var http = new HttpClient { BaseAddress = new Uri("${url}") };
+var payload = new
+{
+    query_embeddings = new[] { ${vecCs} },
+    n_results = ${ctx.topK},
+};
+var resp = await http.PostAsJsonAsync(
+    "/api/v2/tenants/default_tenant/databases/default_database/collections/${ctx.collection}/query",
+    payload);
+Console.WriteLine(await resp.Content.ReadAsStringAsync());`,
+      },
+      {
         id: "curl",
         label: "cURL",
         code: `curl -s -X POST "${url}/api/v2/tenants/default_tenant/databases/default_database/collections/${ctx.collection}/query" \\${authNote ? '\n  -H "Authorization: Bearer <YOUR_API_KEY>" \\' : ""}
@@ -735,6 +980,14 @@ const table = await db.openTable("${ctx.collection}");
 const results = await table.vectorSearch(${vecJson}).limit(${ctx.topK}).toArray();
 console.log(results);`,
       },
+      {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `${tsQueryComment}// LanceDB data directory: "${dir.replace(/\\/g, "\\\\")}"
+// Table: "${ctx.collection}" · Top-K: ${ctx.topK}
+// Vector: ${vecCs}
+// Query via a Python/Node sidecar or DuckDB.NET with the lance extension.`,
+      },
     ];
   }
 
@@ -764,6 +1017,23 @@ const res = await client.index("${ctx.collection}").search("", {
   limit: ${ctx.topK},
 });
 console.log(res.hits);`,
+      },
+      {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `${tsQueryComment}// dotnet add package Meilisearch
+using Meilisearch;
+
+var client = new MeilisearchClient("${url}");
+var res = await client.Index("${ctx.collection}").SearchAsync<Dictionary<string, object>>(
+    "",
+    new SearchQuery
+    {
+        Vector = ${vecCs},
+        Hybrid = new Hybrid { Embedder = "default", SemanticRatio = 1.0f },
+        Limit = ${ctx.topK},
+    });
+Console.WriteLine(res.Hits.Count);`,
       },
       {
         id: "curl",
@@ -805,6 +1075,20 @@ const res = await db.query(
   { vec: ${vecJson} },
 );
 console.log(res);`,
+      },
+      {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `${tsQueryComment}// dotnet add package SurrealDb.Net
+using SurrealDb.Net;
+
+using var db = new SurrealDbClient("${url}");
+await db.SignIn(new RootAuth { Username = "root", Password = "root" });
+await db.Use("embedbay", "default");
+var res = await db.RawQuery(
+    "SELECT id, payload, document, vector::distance::knn() AS dist FROM ${ctx.collection} WHERE vector <|${ctx.topK},40|> $vec ORDER BY dist ASC;",
+    new Dictionary<string, object?> { ["vec"] = ${vecCs} });
+Console.WriteLine(res);`,
       },
       {
         id: "sql",
@@ -860,6 +1144,30 @@ const rows = db.prepare(\`
   ORDER BY v.distance ASC
 \`).all(Buffer.from(qVec.buffer), ${ctx.topK});
 console.log(rows);`,
+      },
+      {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `${tsQueryComment}// dotnet add package Microsoft.Data.Sqlite
+using System.Runtime.InteropServices;
+using Microsoft.Data.Sqlite;
+
+float[] qVec = ${vecCs};
+var qBlob = MemoryMarshal.AsBytes(qVec.AsSpan()).ToArray();
+using var conn = new SqliteConnection(@"Data Source=${dbFile}");
+conn.Open();
+conn.LoadExtension("vec0");
+using var cmd = conn.CreateCommand();
+cmd.CommandText = @"
+    SELECT m.id, m.document, m.payload, v.distance
+    FROM ""vec_${ctx.collection}"" v
+    JOIN ""meta_${ctx.collection}"" m ON m.rowid = v.rowid
+    WHERE v.embedding MATCH $vec AND k = $k
+    ORDER BY v.distance ASC";
+cmd.Parameters.AddWithValue("$vec", qBlob);
+cmd.Parameters.AddWithValue("$k", ${ctx.topK});
+using var reader = cmd.ExecuteReader();
+while (reader.Read()) Console.WriteLine($"{reader["id"]}: {reader["distance"]}");`,
       },
     ];
   }
@@ -917,6 +1225,30 @@ res = client.search(
 print(res["hits"]["hits"])`,
       },
       {
+        id: "csharp",
+        label: "C# (.NET)",
+        code:
+          engine === "elasticsearch"
+            ? `${tsQueryComment}// dotnet add package Elastic.Clients.Elasticsearch
+using Elastic.Clients.Elasticsearch;
+
+var client = new ElasticsearchClient(new Uri("${url}"));
+var res = await client.SearchAsync<Dictionary<string, object>>(s => s
+    .Indices("${ctx.collection}")
+    .Size(${ctx.topK})
+    .Knn(k => k.Field("embedding").QueryVector(${vecCs}).K(${ctx.topK}).NumCandidates(${ctx.topK * 3})));
+Console.WriteLine(res.Hits.Count);`
+            : `${tsQueryComment}// dotnet add package OpenSearch.Client
+using OpenSearch.Client;
+
+var client = new OpenSearchClient(new ConnectionSettings(new Uri("${url}")));
+var res = await client.SearchAsync<Dictionary<string, object>>(s => s
+    .Index("${ctx.collection}")
+    .Size(${ctx.topK})
+    .Query(q => q.Knn("embedding", k => k.Vector(${vecCs}).K(${ctx.topK}))));
+Console.WriteLine(res.Hits.Count);`,
+      },
+      {
         id: "curl",
         label: "cURL",
         code: `curl -s -X POST "${url}/${ctx.collection}/_search" \\
@@ -947,6 +1279,28 @@ cur.execute(
     (json.dumps(${vecPy}), json.dumps(${vecPy}), ${ctx.topK}),
 )
 print(cur.fetchall())`,
+      },
+      {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `${tsQueryComment}// dotnet add package MySqlConnector
+using System.Text.Json;
+using MySqlConnector;
+
+await using var conn = new MySqlConnection(
+    "Server=127.0.0.1;Port=${ctx.port ?? 3306};User ID=root;Database=embedbay");
+await conn.OpenAsync();
+var vecJson = JsonSerializer.Serialize(${vecCs});
+await using var cmd = new MySqlCommand(@"
+    SELECT id, document, payload,
+           1.0 - VEC_DISTANCE_COSINE(embedding, VEC_FromText(@vec)) AS score
+    FROM \`${ctx.collection}\`
+    ORDER BY VEC_DISTANCE_COSINE(embedding, VEC_FromText(@vec)) ASC
+    LIMIT @k", conn);
+cmd.Parameters.AddWithValue("@vec", vecJson);
+cmd.Parameters.AddWithValue("@k", ${ctx.topK});
+await using var reader = await cmd.ExecuteReaderAsync();
+while (await reader.ReadAsync()) Console.WriteLine($"{reader["id"]}: {reader["score"]}");`,
       },
       {
         id: "sql",
@@ -981,6 +1335,24 @@ rows = con.execute(
     (${vecPy}, ${ctx.topK}),
 ).fetchall()
 print(rows)`,
+      },
+      {
+        id: "csharp",
+        label: "C# (.NET)",
+        code: `${tsQueryComment}// dotnet add package DuckDB.NET.Data.Full
+using DuckDB.NET.Data;
+
+using var conn = new DuckDBConnection(@"Data Source=${dbFile}");
+await conn.OpenAsync();
+using var cmd = conn.CreateCommand();
+cmd.CommandText = @"
+    SELECT id, document, payload,
+           array_cosine_similarity(embedding, ${vecJson}::FLOAT[${dims}]) AS score
+    FROM ""${ctx.collection}""
+    ORDER BY score DESC
+    LIMIT ${ctx.topK};";
+using var reader = await cmd.ExecuteReaderAsync();
+while (await reader.ReadAsync()) Console.WriteLine($"{reader["id"]}: {reader["score"]}");`,
       },
       {
         id: "sql",
@@ -1044,6 +1416,25 @@ const hits = await client.query("${ctx.collection}", {
   with_payload: true,
 });
 console.log(hits);`,
+    },
+    {
+      id: "csharp",
+      label: "C# (.NET)",
+      code: `${tsQueryComment}// dotnet add package Qdrant.Client
+using Qdrant.Client;
+
+var uri = new Uri("${url}");
+using var client = new QdrantClient(
+    host: uri.Host,
+    port: uri.Port == 6333 ? 6334 : uri.Port,
+    https: uri.Scheme == "https"${authNote ? ',\n    apiKey: Environment.GetEnvironmentVariable("QDRANT_API_KEY") ?? "<YOUR_API_KEY>"' : ""});
+
+var hits = await client.QueryAsync(
+    collectionName: "${ctx.collection}",
+    query: ${vecCs},
+    limit: ${ctx.topK},${ctx.scoreThreshold != null ? `\n    scoreThreshold: ${ctx.scoreThreshold}f,` : ""}
+    payloadSelector: true);
+foreach (var point in hits) Console.WriteLine($"{point.Id}: {point.Score}");`,
     },
     {
       id: "curl",

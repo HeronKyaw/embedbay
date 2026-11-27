@@ -2,7 +2,7 @@ export type ThemeMode = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
 export type CloseBehavior = "tray" | "quit";
 
-export type ActivitySection = "explorer" | "runtimes" | "store";
+export type ActivitySection = "explorer" | "runtimes" | "store" | "migrations";
 
 export type SettingsTabId =
   | "general"

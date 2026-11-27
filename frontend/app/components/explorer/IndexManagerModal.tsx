@@ -74,11 +74,17 @@ export function IndexManagerModal({
   const [pgEfConstruction, setPgEfConstruction] = React.useState("64");
   const [pgLists, setPgLists] = React.useState("100");
 
-  const loadIndexes = React.useCallback(async () => {
+  const loadIndexes = React.useCallback(async (manual = false) => {
     if (!open || !target || !collection) return;
     setLoading(true);
+    const minSpin = manual
+      ? new Promise((resolve) => window.setTimeout(resolve, 400))
+      : Promise.resolve();
     try {
-      const list = await listCollectionIndexes(target, collection);
+      const [list] = await Promise.all([
+        listCollectionIndexes(target, collection),
+        minSpin,
+      ]);
       setIndexes(list);
     } catch (err: unknown) {
       toast.error("Failed to load indexes", formatUserError(err));
@@ -210,7 +216,7 @@ export function IndexManagerModal({
               variant="ghost"
               size="sm"
               disabled={loading}
-              onClick={() => void loadIndexes()}
+              onClick={() => void loadIndexes(true)}
             >
               <RefreshCw
                 className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}

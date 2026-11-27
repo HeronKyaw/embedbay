@@ -71,7 +71,8 @@ function readInitialPreferences(): WorkspacePreferences {
       defaultSection:
         parsed.defaultSection === "explorer" ||
         parsed.defaultSection === "runtimes" ||
-        parsed.defaultSection === "store"
+        parsed.defaultSection === "store" ||
+        parsed.defaultSection === "migrations"
           ? parsed.defaultSection
           : DEFAULT_WORKSPACE_PREFERENCES.defaultSection,
       defaultPageSize:
@@ -113,6 +114,7 @@ interface AppState {
   onboardingCompleted: boolean;
   onboardingOpen: boolean;
   activeSection: ActivitySection;
+  selectedStoreEngine: string | null;
   settingsOpen: boolean;
   settingsTab: SettingsTabId;
   commandPaletteOpen: boolean;
@@ -125,6 +127,8 @@ interface AppState {
   setOnboardingOpen: (open: boolean) => void;
   completeOnboarding: () => void;
   setActiveSection: (section: ActivitySection) => void;
+  setSelectedStoreEngine: (engineType: string | null) => void;
+  openStoreEngine: (engineType: string) => void;
   setSettingsOpen: (open: boolean) => void;
   setSettingsTab: (tab: SettingsTabId) => void;
   openSettings: (tab?: SettingsTabId) => void;
@@ -149,6 +153,7 @@ export const useAppStore = create<AppState>((set) => ({
   onboardingCompleted: initialOnboardingCompleted,
   onboardingOpen: false,
   activeSection: initialPreferences.defaultSection,
+  selectedStoreEngine: null,
   settingsOpen: false,
   settingsTab: "general",
   commandPaletteOpen: false,
@@ -202,6 +207,9 @@ export const useAppStore = create<AppState>((set) => ({
     set({ onboardingCompleted: true, onboardingOpen: false });
   },
   setActiveSection: (activeSection) => set({ activeSection }),
+  setSelectedStoreEngine: (selectedStoreEngine) => set({ selectedStoreEngine }),
+  openStoreEngine: (engineType) =>
+    set({ activeSection: "store", selectedStoreEngine: engineType }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setSettingsTab: (settingsTab) => set({ settingsTab }),
   openSettings: (tab) =>

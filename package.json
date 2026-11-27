@@ -1,6 +1,6 @@
 {
   "name": "embedbay",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "license": "MIT",
   "description": "Local Vector DB Manager & Explorer",
@@ -9,10 +9,13 @@
     "build": "cd backend && npx tauri build",
     "frontend:dev": "npm --prefix frontend run dev",
     "frontend:build": "npm --prefix frontend run build",
+    "frontend:test": "npm --prefix frontend test",
+    "e2e": "node e2e/run-e2e.mjs",
     "backend:check": "cargo check --manifest-path backend/Cargo.toml",
     "backend:test": "cargo test --manifest-path backend/Cargo.toml"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.2.0"
+    "@tauri-apps/cli": "^2.2.0",
+    "webdriverio": "^10.1.0"
   }
 }

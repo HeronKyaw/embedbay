@@ -2,6 +2,7 @@ import * as React from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { ImportExportModal } from "@/components/explorer/ImportExportModal";
 import { ExplorerWorkspace } from "@/components/explorer/ExplorerWorkspace";
+import { MigrationsPage } from "@/components/explorer/MigrationsPage";
 import { MigrationWizardModal } from "@/components/explorer/MigrationWizardModal";
 import { RemoteConnectionModal } from "@/components/explorer/RemoteConnectionModal";
 import { ActivityRail } from "@/components/layout/ActivityRail";
@@ -273,6 +274,7 @@ export function App() {
                         storageCleanupBanner={<UnusedEngineCleanupBanner />}
                       />
                     )}
+                    {activeSection === "migrations" && <MigrationsPage />}
                   </div>
                 )}
               </main>

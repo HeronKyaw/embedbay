@@ -170,6 +170,32 @@ impl ManifestService {
         })
     }
 
+    /// Reloads the manifest from disk (falling back to the bundled manifest if absent/invalid).
+    pub fn reload(&self) -> Result<usize, String> {
+        let next: EngineManifest = if self.manifest_path.exists() {
+            match std::fs::read_to_string(&self.manifest_path)
+                .ok()
+                .and_then(|raw| serde_json::from_str::<EngineManifest>(&raw).ok())
+            {
+                Some(parsed) => parsed,
+                None => serde_json::from_str(BUNDLED_MANIFEST_JSON)
+                    .map_err(|e| format!("Invalid bundled engines manifest: {}", e))?,
+            }
+        } else {
+            let _ = std::fs::write(&self.manifest_path, BUNDLED_MANIFEST_JSON);
+            serde_json::from_str(BUNDLED_MANIFEST_JSON)
+                .map_err(|e| format!("Invalid bundled engines manifest: {}", e))?
+        };
+
+        let count = next.engines.len();
+        let mut guard = self
+            .manifest
+            .write()
+            .map_err(|_| "Manifest lock poisoned".to_string())?;
+        *guard = next;
+        Ok(count)
+    }
+
     pub fn find_artifact(
         &self,
         engine_type: &str,
@@ -409,5 +435,32 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn reload_refreshes_manifest_from_disk() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let service = ManifestService::load_or_init(dir.path()).expect("init");
+        let initial_count = service.reload().expect("initial reload");
+        assert!(initial_count >= 10);
+
+        // Write a valid single-engine manifest to disk and verify reload picks it up
+        let custom_json = serde_json::json!({
+            "schema_version": 99,
+            "updated_at": "2026-11-27T00:00:00Z",
+            "engines": [{
+                "engine_type": "qdrant",
+                "display_name": "Qdrant Custom",
+                "description": "Reloaded",
+                "tier": 1,
+                "embedded": false,
+                "default_port": 6333,
+                "versions": []
+            }]
+        });
+        std::fs::write(service.manifest_path(), custom_json.to_string()).expect("write");
+        let reloaded_count = service.reload().expect("reload");
+        assert_eq!(reloaded_count, 1);
+        assert_eq!(service.diagnostics_info().expect("diag").schema_version, 99);
     }
 }

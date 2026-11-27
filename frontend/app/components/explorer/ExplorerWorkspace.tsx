@@ -47,6 +47,7 @@ import {
   upsertRecords,
 } from "@/ipc/explorer";
 import { startInstance, stopInstance } from "@/ipc/instances";
+import { isEmbeddedEngine } from "@/lib/engineVersions";
 import { formatRamMb } from "@/lib/format";
 import { generateConnectionSnippets } from "@/lib/snippets";
 import { cn } from "@/lib/utils";
@@ -500,7 +501,7 @@ export function ExplorerWorkspace({
       if (!inst) return null;
       const m = metrics[inst.id];
       const st = m?.status ?? "stopped";
-      const isEmbedded = st === "embedded" || inst.engine_type === "lancedb";
+      const isEmbedded = st === "embedded" || isEmbeddedEngine(inst.engine_type);
       return {
         key: selectedConnectionKey,
         kind: "local" as const,

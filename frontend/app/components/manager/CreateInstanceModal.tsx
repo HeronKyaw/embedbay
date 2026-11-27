@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, FolderOpen, Wand2 } from "lucide-react";
 import { TagPicker } from "@/components/sidebar/TagPicker";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { EngineIcon } from "@/components/ui/engine-icon";
 import { toast } from "@/components/ui/toast";
 import {
   checkPortAvailable,
@@ -44,7 +45,7 @@ export function CreateInstanceModal({
   const instances = useRuntimeStore((s) => s.instances);
   const groups = useRuntimeStore((s) => s.groups);
   const refreshInstances = useRuntimeStore((s) => s.refreshInstances);
-  const setActiveSection = useAppStore((s) => s.setActiveSection);
+  const openStoreEngine = useAppStore((s) => s.openStoreEngine);
 
   const [engineType, setEngineType] = React.useState("qdrant");
   const [engineVersion, setEngineVersion] = React.useState("");
@@ -296,6 +297,7 @@ export function CreateInstanceModal({
       onOpenChange={(next) => {
         if (!next) closeModal();
       }}
+      icon={<EngineIcon engineType={engineType} size="sm" />}
       title={editing ? `Edit Instance: ${editing.name}` : "New Local Instance"}
       description="Configure isolated data storage, network ports, group assignment, tags, and boot startup."
       maxWidthClass="w-[580px]"
@@ -315,7 +317,8 @@ export function CreateInstanceModal({
             >
               {catalog.map((c) => (
                 <option key={c.engine_type} value={c.engine_type}>
-                  {c.display_name}
+                  <EngineIcon engineType={c.engine_type} size="xs" />
+                  <span>{c.display_name}</span>
                 </option>
               ))}
             </select>
@@ -348,7 +351,7 @@ export function CreateInstanceModal({
                   type="button"
                   onClick={() => {
                     closeModal();
-                    setActiveSection("store");
+                    openStoreEngine(engineType);
                   }}
                   className="font-semibold underline cursor-pointer"
                 >

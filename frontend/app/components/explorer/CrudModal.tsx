@@ -162,9 +162,9 @@ export function UpsertRecordModal({
     setDocumentText("");
     setPayloadText('{\n  "source": "manual"\n}');
     setVectorText(
-      expectedDimensions
+      expectedDimensions && expectedDimensions <= 16
         ? JSON.stringify(
-            Array.from({ length: Math.min(expectedDimensions, 4) }, () => 0.1),
+            Array.from({ length: expectedDimensions }, () => 0.1),
           )
         : "",
     );

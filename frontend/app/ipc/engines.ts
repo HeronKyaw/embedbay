@@ -4,6 +4,7 @@ import type {
   CatalogEngineView,
   CleanupResult,
   InstalledEngine,
+  InstallProgressEvent,
   StorageUsageSummary,
 } from "@/types/runtime";
 import type { VacuumResult } from "@/types/system";
@@ -66,6 +67,40 @@ const PREVIEW_CATALOG: CatalogEngineView[] = [
 export async function listEngineCatalog(): Promise<CatalogEngineView[]> {
   if (!isTauriRuntime()) return PREVIEW_CATALOG;
   return invoke<CatalogEngineView[]>("list_engine_catalog");
+}
+
+export async function refreshEngineCatalog(): Promise<CatalogEngineView[]> {
+  if (!isTauriRuntime()) return PREVIEW_CATALOG;
+  return invoke<CatalogEngineView[]>("refresh_engine_catalog");
+}
+
+export async function listActiveInstalls(): Promise<InstallProgressEvent[]> {
+  if (!isTauriRuntime()) return [];
+  return invoke<InstallProgressEvent[]>("list_active_installs");
+}
+
+export async function pauseEngineInstall(
+  engineType: string,
+  version: string,
+): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  return invoke<boolean>("pause_engine_install", { engineType, version });
+}
+
+export async function resumeEngineInstall(
+  engineType: string,
+  version: string,
+): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  return invoke<boolean>("resume_engine_install", { engineType, version });
+}
+
+export async function cancelEngineInstall(
+  engineType: string,
+  version: string,
+): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  return invoke<boolean>("cancel_engine_install", { engineType, version });
 }
 
 export async function listInstalledEngines(): Promise<InstalledEngine[]> {

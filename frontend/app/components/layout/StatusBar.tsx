@@ -6,13 +6,18 @@ import {
   ChevronUp,
   Cpu,
   Database,
+  Download,
   Globe,
   HardDrive,
+  Pause,
+  Play,
   Square,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { stopAllInstances } from "@/ipc/instances";
+import { isEmbeddedEngine } from "@/lib/engineVersions";
 import { formatBytes, formatRamMb } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/useAppStore";
@@ -69,7 +74,9 @@ function DetailBar({
 export function StatusBar() {
   const activeSection = useAppStore((s) => s.activeSection);
   const setActiveSection = useAppStore((s) => s.setActiveSection);
+  const openStoreEngine = useAppStore((s) => s.openStoreEngine);
 
+  const catalog = useRuntimeStore((s) => s.catalog);
   const instances = useRuntimeStore((s) => s.instances);
   const metrics = useRuntimeStore((s) => s.metrics);
   const totalRamBytes = useRuntimeStore((s) => s.totalRamBytes);
@@ -77,17 +84,33 @@ export function StatusBar() {
   const totalDiskBytes = useRuntimeStore((s) => s.totalDiskBytes);
   const runningCount = useRuntimeStore((s) => s.runningCount);
   const hostMetrics = useRuntimeStore((s) => s.hostMetrics);
+  const activeInstalls = useRuntimeStore((s) => s.activeInstalls);
+  const pauseInstall = useRuntimeStore((s) => s.pauseInstall);
+  const resumeInstall = useRuntimeStore((s) => s.resumeInstall);
+  const cancelInstall = useRuntimeStore((s) => s.cancelInstall);
   const selectedConnectionKey = useRuntimeStore((s) => s.selectedConnectionKey);
   const refreshInstances = useRuntimeStore((s) => s.refreshInstances);
 
   const remoteConnections = useTabsStore((s) => s.remoteConnections);
 
   const [popoverOpen, setPopoverOpen] = React.useState(false);
+  const [downloadsOpen, setDownloadsOpen] = React.useState(false);
   const [stoppingAll, setStoppingAll] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
 
+  const activeInstallList = React.useMemo(
+    () => Object.values(activeInstalls),
+    [activeInstalls],
+  );
+
   React.useEffect(() => {
-    if (!popoverOpen) return;
+    if (activeInstallList.length === 0) {
+      setDownloadsOpen(false);
+    }
+  }, [activeInstallList.length]);
+
+  React.useEffect(() => {
+    if (!popoverOpen && !downloadsOpen) return;
 
     const handlePointerDown = (e: MouseEvent) => {
       if (
@@ -95,12 +118,14 @@ export function StatusBar() {
         !containerRef.current.contains(e.target as Node)
       ) {
         setPopoverOpen(false);
+        setDownloadsOpen(false);
       }
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setPopoverOpen(false);
+        setDownloadsOpen(false);
       }
     };
 
@@ -110,7 +135,7 @@ export function StatusBar() {
       window.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [popoverOpen]);
+  }, [popoverOpen, downloadsOpen]);
 
   const metricValues = Object.values(metrics);
   const errorCount = metricValues.filter((m) => m.status === "error").length;
@@ -167,7 +192,7 @@ export function StatusBar() {
         running:
           st === "running" ||
           st === "embedded" ||
-          inst.engine_type === "lancedb",
+          isEmbeddedEngine(inst.engine_type),
       };
     }
     if (selectedConnectionKey.startsWith("remote:")) {
@@ -282,11 +307,55 @@ export function StatusBar() {
         )}
       </div>
 
-      {/* Right: Docker-Style Host & Managed DB Resource Cluster */}
-      <button
-        type="button"
-        onClick={() => setPopoverOpen((prev) => !prev)}
-        aria-expanded={popoverOpen}
+      {/* Right: Downloads Tracker + Docker-Style Host & Managed DB Resource Cluster */}
+      <div className="flex items-center gap-2">
+        {activeInstallList.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setDownloadsOpen((prev) => !prev);
+              setPopoverOpen(false);
+            }}
+            aria-expanded={downloadsOpen}
+            aria-label="Active Engine Downloads"
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[10px] transition-colors cursor-pointer",
+              downloadsOpen
+                ? "border-[var(--accent-primary)] bg-[var(--accent-primary)]/15 text-[var(--accent-primary)]"
+                : "border-[var(--accent-primary)]/40 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/20",
+            )}
+          >
+            <Download
+              className={cn(
+                "h-3 w-3",
+                activeInstallList.some((d) => d.stage !== "paused") &&
+                  "animate-pulse",
+              )}
+            />
+            <span>
+              {activeInstallList.length === 1
+                ? `${
+                    catalog.find(
+                      (c) =>
+                        c.engine_type === activeInstallList[0].engine_type,
+                    )?.display_name ?? activeInstallList[0].engine_type
+                  } ${
+                    activeInstallList[0].stage === "paused"
+                      ? "(Paused)"
+                      : `${Math.round(activeInstallList[0].percent)}%`
+                  }`
+                : `${activeInstallList.length} Downloads`}
+            </span>
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => {
+            setPopoverOpen((prev) => !prev);
+            setDownloadsOpen(false);
+          }}
+          aria-expanded={popoverOpen}
         aria-label="System and Database Resource Telemetry"
         title="Click for Host & Managed DB Resource Breakdown"
         className={cn(
@@ -337,6 +406,125 @@ export function StatusBar() {
           <ChevronUp className="h-3 w-3 text-[var(--text-muted)]" />
         )}
       </button>
+      </div>
+
+      {/* Active Downloads Popover */}
+      {downloadsOpen && activeInstallList.length > 0 && (
+        <div
+          role="dialog"
+          aria-label="Engine Downloads"
+          className="absolute right-3 bottom-8 z-50 w-[360px] rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-3.5 shadow-2xl select-text"
+        >
+          <div className="mb-2.5 flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+              Engine Downloads ({activeInstallList.length})
+            </span>
+            <button
+              type="button"
+              onClick={() => setDownloadsOpen(false)}
+              aria-label="Close downloads"
+              className="rounded p-0.5 text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="max-h-60 space-y-2.5 overflow-y-auto">
+            {activeInstallList.map((dl) => {
+              const displayName =
+                catalog.find((c) => c.engine_type === dl.engine_type)
+                  ?.display_name ?? dl.engine_type;
+              const isPaused = dl.stage === "paused";
+              const canPauseResume =
+                dl.stage === "downloading" || dl.stage === "paused";
+              const canCancel =
+                dl.stage === "downloading" || dl.stage === "paused";
+              return (
+                <div
+                  key={`${dl.engine_type}-${dl.version}`}
+                  className="space-y-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-2.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDownloadsOpen(false);
+                        openStoreEngine(dl.engine_type);
+                      }}
+                      className="min-w-0 truncate text-left text-xs font-semibold text-[var(--text-primary)] hover:text-[var(--accent-primary)] cursor-pointer"
+                    >
+                      {displayName} v{dl.version}
+                    </button>
+                    <span className="shrink-0 font-mono text-[10px] text-[var(--accent-primary)]">
+                      {isPaused ? "Paused" : `${Math.round(dl.percent)}%`}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-canvas)]">
+                    <div
+                      className={cn(
+                        "h-full transition-all duration-150",
+                        isPaused
+                          ? "bg-[var(--status-starting)]"
+                          : "bg-[var(--accent-primary)]",
+                      )}
+                      style={{
+                        width: `${Math.min(100, Math.max(2, dl.percent))}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate font-mono text-[10px] text-[var(--text-muted)]">
+                      {dl.total_bytes > 0
+                        ? `${formatBytes(dl.downloaded_bytes)} / ${formatBytes(dl.total_bytes)}`
+                        : dl.message}
+                    </span>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {canPauseResume && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() =>
+                            void (isPaused
+                              ? resumeInstall(dl.engine_type, dl.version)
+                              : pauseInstall(dl.engine_type, dl.version))
+                          }
+                        >
+                          {isPaused ? (
+                            <>
+                              <Play className="h-2.5 w-2.5" />
+                              Resume
+                            </>
+                          ) : (
+                            <>
+                              <Pause className="h-2.5 w-2.5" />
+                              Pause
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      {canCancel && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-[10px] text-[var(--status-error)]"
+                          onClick={() =>
+                            void cancelInstall(dl.engine_type, dl.version)
+                          }
+                        >
+                          <Square className="h-2.5 w-2.5 fill-current" />
+                          Stop
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Resource Breakdown Popover */}
       {popoverOpen && (

@@ -1,10 +1,19 @@
 import * as React from "react";
 import { Check, Code2, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CodeBlock } from "@/components/ui/code-block";
 import { Dialog } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
-import type { CodeSnippet } from "@/lib/snippets";
+import type { CodeSnippet, SnippetLang } from "@/lib/snippets";
 import { cn } from "@/lib/utils";
+
+const LANG_DOT_COLORS: Record<SnippetLang, string> = {
+  python: "#3B82F6",
+  typescript: "#38BDF8",
+  csharp: "#A78BFA",
+  curl: "#10B981",
+  sql: "#F59E0B",
+};
 
 export function SnippetModal({
   open,
@@ -66,7 +75,7 @@ export function SnippetModal({
     >
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="inline-flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-0.5 text-xs">
+          <div className="inline-flex flex-wrap gap-0.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-0.5 text-xs">
             {snippets.map((snippet) => (
               <button
                 key={snippet.id}
@@ -76,12 +85,21 @@ export function SnippetModal({
                   setCopied(false);
                 }}
                 className={cn(
-                  "rounded-md px-3 py-1 font-medium transition-colors cursor-pointer",
+                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition-colors cursor-pointer",
                   current?.id === snippet.id
                     ? "bg-[var(--accent-primary)] text-slate-950 font-semibold"
                     : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
                 )}
               >
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{
+                    backgroundColor:
+                      current?.id === snippet.id
+                        ? "#0F172A"
+                        : LANG_DOT_COLORS[snippet.id],
+                  }}
+                />
                 {snippet.label}
               </button>
             ))}
@@ -103,9 +121,10 @@ export function SnippetModal({
           </Button>
         </div>
 
-        <pre className="max-h-[54vh] overflow-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3.5 font-mono text-[11px] leading-relaxed text-[var(--text-primary)]">
-          <code>{current?.code ?? ""}</code>
-        </pre>
+        <CodeBlock
+          code={current?.code ?? ""}
+          language={current?.id ?? "python"}
+        />
       </div>
     </Dialog>
   );

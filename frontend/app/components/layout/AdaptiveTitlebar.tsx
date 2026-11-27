@@ -11,6 +11,7 @@ const SECTION_TAB_LABELS: Record<ActivitySection, string> = {
   explorer: "Vector Explorer",
   runtimes: "Local Runtimes",
   store: "Engine Store",
+  migrations: "Migrations",
 };
 
 export function AdaptiveTitlebar() {

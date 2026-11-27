@@ -25,7 +25,7 @@ EmbedBay installs, runs, monitors, and explores local and remote vector database
 ## Features
 
 ### Native Runtime & Supervision
-- **One-Click Engine Store** — Downloads official native binaries over HTTPS, verifies SHA-256 checksums, and isolates versions cleanly.
+- **One-Click Engine Store** — Dedicated engine product pages with branded icons, version picker, SHA-256 verification, and persistent background downloads with Pause, Resume, and Stop controls.
 - **Silent Process Management** — Runs background engines with zero console window flashes, automatic port conflict suggestions, health polling, and crash restarts.
 - **System Tray & Idle Auto-Stop** — Reclaims UI RAM when closed to the tray, tracks live CPU/RAM/disk metrics and rotating logs, and stops idle instances automatically.
 - **Safe Backup & Restore** — Stops running instances before zipping data directories to guarantee consistent snapshots.
@@ -37,8 +37,8 @@ EmbedBay installs, runs, monitors, and explores local and remote vector database
 
 ### Search, Ingestion & Migration
 - **Search Playground & A/B Compare** — Run vector or plain-text queries, filter metadata, inspect latency histograms, and compare two queries or collections side-by-side.
-- **History, Presets & Code Snippets** — Save reusable search presets, browse per-collection history, and copy Python, TypeScript, `curl`, or SQL snippets (with placeholder env vars).
-- **Ingestion & Cross-Engine Migration** — Preview recursive or Markdown-header chunking for `.md` / `.txt` files, import/export JSONL and CSV, and migrate/re-embed collections across engines.
+- **History, Presets & Code Snippets** — Save reusable search presets, browse per-collection history, and copy syntax-highlighted **Python, TypeScript, C# (.NET), `curl`, and SQL** snippets (with placeholder env vars).
+- **Dedicated Migrations & Ingestion** — Migrate or re-embed collections across any two databases from the **Migrations** sidebar page (or in-collection wizard), preview `.md`/`.txt` chunking, and import/export JSONL/CSV.
 
 ### Visualization, Embeddings & Security
 - **2D/3D WebGL Visualizer** — Explore vector clusters interactively with Rust-native PCA and UMAP dimensionality reduction.
@@ -79,6 +79,8 @@ Download the latest Windows `x64` installer from [GitHub Releases](https://githu
 
 Requires Windows 10/11 (`x86_64`) and Microsoft Edge WebView2 Runtime (pre-installed on Windows 11). See the [Getting Started Guide](docs/getting-started.md) for your first database setup.
 
+> **Windows SmartScreen Note:** Public community installers are currently unsigned. If Windows SmartScreen warns on first launch, click **More info → Run anyway** (you can verify the installer SHA-256 on the GitHub Release page).
+
 ---
 
 ## Development
@@ -93,9 +95,13 @@ npm --prefix frontend install
 # Launch desktop app in hot-reload dev mode
 npm run dev
 
-# Run backend Rust tests & verify production frontend build
+# Run backend Rust tests, frontend UI/IPC tests & verify production build
 npm run backend:test
+npm run frontend:test
 npm run frontend:build
+
+# Run real Windows desktop E2E tests (requires built backend/target/debug/embedbay.exe)
+npm run e2e
 ```
 
 <details>
@@ -134,12 +140,12 @@ See [ROADMAP.md](ROADMAP.md) for the full milestone breakdown.
 | [System Architecture](docs/architecture.md) | Platform isolation, process supervision, SQLite + Keyring storage, and analytics |
 | [Engines & Remote Adapters](docs/engines-and-adapters.md) | Tier 1 local binaries, embedded engines, Tier 2 remote connections, and manifest updates |
 | [Developer Guide](docs/development.md) | Toolchain setup, testing conventions, theme tokens, and unsigned local builds |
-| [Release & Packaging Guide](docs/releasing.md) | Updater keypair, SignPath Foundation setup, NSIS/WiX installers, and CI/CD |
+| [Release & Packaging Guide](docs/releasing.md) | Updater keypair, release integrity, NSIS/WiX installers, and CI/CD |
 
 ---
 
-## License, Privacy & Code Signing
+## License, Privacy & Release Integrity
 
 - **License:** Released under the [MIT License](LICENSE).
 - **Privacy:** Zero telemetry, analytics, or crash reporting. Data is stored locally under `%LOCALAPPDATA%\com.embedbay.app`, and secrets stay in Windows Credential Manager (`keyring`). See [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) for full details.
-- **Code Signing:** Free open-source Windows code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/) (enrolling after the `v0.1.0` initial public release).
+- **Integrity:** Official Windows installers are built directly from tagged commits in GitHub Actions; in-app updates are Ed25519-verified, and Engine Store binaries are SHA-256-verified.

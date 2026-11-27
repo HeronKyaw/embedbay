@@ -12,6 +12,15 @@ export interface EngineUpdateInfo {
 }
 
 /**
+ * Returns true for zero-daemon embedded engines that run in-process or on-demand
+ * without a persistent background server process.
+ */
+export function isEmbeddedEngine(engineType: string): boolean {
+  const e = engineType.toLowerCase();
+  return e === "lancedb" || e === "sqlite_vec" || e === "duckdb";
+}
+
+/**
  * Compares two version strings numerically on digit runs and lexicographically
  * on non-digit runs (handling semver, compound versions, and embedded tags).
  */

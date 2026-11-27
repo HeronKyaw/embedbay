@@ -13,6 +13,7 @@ import {
   Play,
   Plus,
   Power,
+  Repeat2,
   Settings,
   Sparkles,
   Square,
@@ -36,6 +37,7 @@ import {
   stopInstance,
 } from "@/ipc/instances";
 import { setAutostartEnabled } from "@/ipc/system";
+import { isEmbeddedEngine } from "@/lib/engineVersions";
 import { useAppStore } from "@/stores/useAppStore";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
 import { useTabsStore } from "@/stores/useTabsStore";
@@ -127,6 +129,14 @@ export function CommandPalette() {
             <PackagePlus className="h-3.5 w-3.5 text-[var(--accent-ai)]" />
             <span>Open Engine Store</span>
             <CommandShortcut>Store</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            value="nav-migrations-open-migrations"
+            onSelect={() => navigate("migrations")}
+          >
+            <Repeat2 className="h-3.5 w-3.5 text-[var(--accent-primary)]" />
+            <span>Open Migrations</span>
+            <CommandShortcut>Migrations</CommandShortcut>
           </CommandItem>
           <CommandItem
             value="nav-settings-open-workspace-settings"
@@ -229,7 +239,7 @@ export function CommandPalette() {
           {instances.map((inst) => {
             const st = metrics[inst.id]?.status ?? "stopped";
             const running = st === "running";
-            const embedded = st === "embedded" || inst.engine_type === "lancedb";
+            const embedded = st === "embedded" || isEmbeddedEngine(inst.engine_type);
             return (
               <React.Fragment key={inst.id}>
                 {!embedded && (

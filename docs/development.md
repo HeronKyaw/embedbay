@@ -29,6 +29,8 @@ Root convenience scripts in `package.json`:
 | `npm run dev` | `cd backend && npx tauri dev` | Launches Vite dev server + Rust backend + Tauri desktop window |
 | `npm run build` | `cd backend && npx tauri build` | Builds frontend (`npm --prefix frontend run build`) + release installers |
 | `npm run frontend:build` | `npm --prefix frontend run build` | Runs `tsc -b && vite build` |
+| `npm run frontend:test` | `npm --prefix frontend test` | Runs Vitest UI & IPC contract tests (`frontend/test/`) |
+| `npm run e2e` | `node e2e/run-e2e.mjs` | Runs real Windows WebView2 E2E tests via `tauri-driver` |
 | `npm run backend:check` | `cargo check --manifest-path backend/Cargo.toml` | Fast Rust compile check |
 | `npm run backend:test` | `cargo test --manifest-path backend/Cargo.toml` | Runs all Rust unit tests |
 

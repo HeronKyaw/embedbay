@@ -43,6 +43,15 @@
   --tag-tint-opacity: 15%;
   --tag-border-opacity: 40%;
 
+  /* Code Syntax Highlighting (Dark) */
+  --code-comment: #64748B;
+  --code-keyword: #C084FC;
+  --code-string: #34D399;
+  --code-number: #FBBF24;
+  --code-type: #38BDF8;
+  --code-func: #2DD4BF;
+  --code-flag: #F472B6;
+
   /* Select dropdown chevron icon (matches --text-secondary #94A3B8) */
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2394A3B8' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
 }
@@ -88,6 +97,15 @@
   /* Pill opacity mixing parameters for Light Mode */
   --tag-tint-opacity: 10%;
   --tag-border-opacity: 35%;
+
+  /* Code Syntax Highlighting (Light) */
+  --code-comment: #64748B;
+  --code-keyword: #7C3AED;
+  --code-string: #059669;
+  --code-number: #D97706;
+  --code-type: #0284C7;
+  --code-func: #0D9488;
+  --code-flag: #DB2777;
 
   /* Select dropdown chevron icon (matches --text-secondary #475569) */
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23475569' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");

@@ -100,12 +100,18 @@ export function DiagnosticsPanel() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  const loadDiagnostics = React.useCallback(async () => {
+  const loadDiagnostics = React.useCallback(async (manual = false) => {
     setLoading(true);
     setError(null);
+    const minSpin = manual
+      ? new Promise((resolve) => window.setTimeout(resolve, 400))
+      : Promise.resolve();
     try {
-      const next = await getDiagnostics();
+      const [next] = await Promise.all([getDiagnostics(), minSpin]);
       setReport(next);
+      if (manual) {
+        toast.success("Diagnostics refreshed");
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -202,7 +208,7 @@ export function DiagnosticsPanel() {
             variant="outline"
             size="sm"
             disabled={loading}
-            onClick={() => void loadDiagnostics()}
+            onClick={() => void loadDiagnostics(true)}
           >
             <RefreshCw
               className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}

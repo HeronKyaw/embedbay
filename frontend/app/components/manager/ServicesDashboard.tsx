@@ -24,6 +24,7 @@ import { ResourceMeters } from "@/components/manager/ResourceMeters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { EngineIcon } from "@/components/ui/engine-icon";
 import { InstanceStatusBadge } from "@/components/ui/status-badge";
 import { toast } from "@/components/ui/toast";
 import {
@@ -36,11 +37,13 @@ import {
   stopInstance,
   updateInstance,
 } from "@/ipc/instances";
+import { isEmbeddedEngine } from "@/lib/engineVersions";
 import { formatBytes, formatRamMb } from "@/lib/format";
 import { generateConnectionSnippets } from "@/lib/snippets";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/useAppStore";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
+import { useTabsStore } from "@/stores/useTabsStore";
 import type { InstanceRecord, InstanceStatus } from "@/types/runtime";
 
 export function ServicesDashboard({
@@ -69,6 +72,14 @@ export function ServicesDashboard({
     (s) => s.openEditInstanceModal,
   );
   const refreshInstances = useRuntimeStore((s) => s.refreshInstances);
+  const selectedConnectionKey = useRuntimeStore((s) => s.selectedConnectionKey);
+  const setSelectedConnectionKey = useRuntimeStore(
+    (s) => s.setSelectedConnectionKey,
+  );
+  const closeTabsForConnection = useTabsStore((s) => s.closeTabsForConnection);
+  const clearConnectionCollections = useTabsStore(
+    (s) => s.clearConnectionCollections,
+  );
   const setActiveSection = useAppStore((s) => s.setActiveSection);
 
   const [busyId, setBusyId] = React.useState<string | null>(null);
@@ -124,7 +135,15 @@ export function ServicesDashboard({
     setDeleteTarget(null);
     await runAction(
       target.id,
-      () => deleteInstance(target.id, deleteDataFlag),
+      async () => {
+        await deleteInstance(target.id, deleteDataFlag);
+        const connKey = `local:${target.id}`;
+        closeTabsForConnection(connKey);
+        clearConnectionCollections(connKey);
+        if (selectedConnectionKey === connKey) {
+          setSelectedConnectionKey(null);
+        }
+      },
       `Deleted instance "${target.name}"`,
     );
     if (activeLogInstanceId === target.id) {
@@ -270,7 +289,7 @@ export function ServicesDashboard({
             const isStartingOrStopping =
               status === "starting" || status === "stopping";
             const isEmbedded =
-              status === "embedded" || inst.engine_type === "lancedb";
+              status === "embedded" || isEmbeddedEngine(inst.engine_type);
             const isBusy = busyId === inst.id;
             const group = groups.find((g) => g.id === inst.group_id);
             const itemTags = tags.filter((t) => inst.tag_ids.includes(t.id));
@@ -286,11 +305,13 @@ export function ServicesDashboard({
                 className="flex flex-col gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4"
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                        {inst.name}
-                      </h3>
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <EngineIcon engineType={inst.engine_type} size="md" className="mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                          {inst.name}
+                        </h3>
                       <InstanceStatusBadge
                         status={status}
                         embeddedLabel="Embedded (0 MB)"
@@ -323,11 +344,12 @@ export function ServicesDashboard({
                         </span>
                       )}
                     </div>
-                    {inst.description && (
-                      <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-                        {inst.description}
-                      </p>
-                    )}
+                      {inst.description && (
+                        <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+                          {inst.description}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   {/* Boot Toggle */}
@@ -582,7 +604,7 @@ export function ServicesDashboard({
               targetMetrics?.status ?? "stopped";
             const targetEmbedded =
               targetStatus === "embedded" ||
-              deleteTarget.engine_type === "lancedb";
+              isEmbeddedEngine(deleteTarget.engine_type);
 
             return (
               <div className="space-y-4">

@@ -21,6 +21,7 @@ import {
   type MigrationResult,
   type TransferProgressEvent,
 } from "@/ipc/transfer";
+import { isEmbeddedEngine } from "@/lib/engineVersions";
 import { formatUserError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
@@ -69,7 +70,7 @@ export function MigrationWizardModal({
       const ready =
         st === "running" ||
         st === "embedded" ||
-        inst.engine_type === "lancedb";
+        isEmbeddedEngine(inst.engine_type);
       if (!ready) continue;
       out.push({
         key: `local:${inst.id}`,
