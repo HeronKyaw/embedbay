@@ -1,4 +1,5 @@
 import * as React from "react";
+import { listen } from "@tauri-apps/api/event";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { ImportExportModal } from "@/components/explorer/ImportExportModal";
 import { ExplorerWorkspace } from "@/components/explorer/ExplorerWorkspace";
@@ -9,6 +10,7 @@ import { ActivityRail } from "@/components/layout/ActivityRail";
 import { AdaptiveTitlebar } from "@/components/layout/AdaptiveTitlebar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { StatusBar } from "@/components/layout/StatusBar";
+import { UpdateBanner } from "@/components/layout/UpdateBanner";
 import { CreateInstanceModal } from "@/components/manager/CreateInstanceModal";
 import { EngineCatalog } from "@/components/manager/EngineCatalog";
 import { ServicesDashboard } from "@/components/manager/ServicesDashboard";
@@ -19,7 +21,11 @@ import { ToastViewport, toast } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { EmbeddingScatterPlot } from "@/components/visualizer/EmbeddingScatterPlot";
 import { backupInstance, restoreInstance } from "@/ipc/instances";
-import { getAppStatus, isTauriRuntime } from "@/ipc/system";
+import {
+  consumePendingOpenAbout,
+  getAppStatus,
+  isTauriRuntime,
+} from "@/ipc/system";
 import { formatBytes } from "@/lib/format";
 import { useAppStore } from "@/stores/useAppStore";
 import {
@@ -27,6 +33,7 @@ import {
   useRuntimeStore,
 } from "@/stores/useRuntimeStore";
 import { useTabsStore } from "@/stores/useTabsStore";
+import { useUpdaterStore } from "@/stores/useUpdaterStore";
 import type {
   CollectionSchema,
   ConnectionTarget,
@@ -78,6 +85,7 @@ export function App() {
   React.useEffect(() => {
     let active = true;
     let removeSplashTimer: number | undefined;
+    let unlistenOpenAbout: (() => void) | undefined;
 
     const dismissSplash = () => {
       const splash = document.getElementById("embedbay-splash");
@@ -103,10 +111,23 @@ export function App() {
         if (active) setStatusLoading(false);
       });
 
+    // Run silent update check in parallel during the splash screen (offline-first: skips immediately if offline).
+    const updateCheckPromise =
+      isTauriRuntime() && useAppStore.getState().onboardingCompleted
+        ? statusPromise.then(() => {
+            if (!active) return;
+            const ver = useAppStore.getState().appStatus?.app_version ?? "0.1.0";
+            return useUpdaterStore
+              .getState()
+              .checkForUpdates(ver, { silent: true });
+          })
+        : Promise.resolve();
+
     const bootstrapPromise = Promise.allSettled([
       statusPromise,
       refreshAll(),
       refreshConnectionsAndProfiles(),
+      updateCheckPromise,
     ]);
     const timeoutPromise = new Promise<void>((resolve) => {
       window.setTimeout(resolve, 1200);
@@ -117,8 +138,27 @@ export function App() {
       dismissSplash();
       if (!useAppStore.getState().onboardingCompleted) {
         useAppStore.getState().setOnboardingOpen(true);
+      } else if (isTauriRuntime()) {
+        void consumePendingOpenAbout()
+          .then((shouldOpenAbout) => {
+            if (active && shouldOpenAbout) {
+              useAppStore.getState().openSettings("about");
+            }
+          })
+          .catch(() => {});
       }
     });
+
+    if (isTauriRuntime()) {
+      void listen("embedbay://open-update-about", () => {
+        if (!active) return;
+        useAppStore.getState().openSettings("about");
+      })
+        .then((fn) => {
+          unlistenOpenAbout = fn;
+        })
+        .catch(() => {});
+    }
 
     const unlisten = subscribeRuntimeEvents();
 
@@ -127,6 +167,7 @@ export function App() {
       if (removeSplashTimer !== undefined) {
         window.clearTimeout(removeSplashTimer);
       }
+      unlistenOpenAbout?.();
       unlisten();
     };
   }, [
@@ -216,6 +257,7 @@ export function App() {
               <ActivityRail />
 
               <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--bg-canvas)]">
+                <UpdateBanner />
                 {statusError && (
                   <div className="m-4 rounded-lg border border-[var(--status-error)]/40 bg-[var(--status-error)]/10 px-4 py-3 text-xs text-[var(--status-error)]">
                     IPC status check error: {statusError}

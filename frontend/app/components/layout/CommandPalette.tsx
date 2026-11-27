@@ -41,6 +41,7 @@ import { isEmbeddedEngine } from "@/lib/engineVersions";
 import { useAppStore } from "@/stores/useAppStore";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
 import { useTabsStore } from "@/stores/useTabsStore";
+import { useUpdaterStore } from "@/stores/useUpdaterStore";
 import type { ActivitySection } from "@/types/system";
 
 export function CommandPalette() {
@@ -70,6 +71,12 @@ export function CommandPalette() {
   );
   const refreshInstances = useRuntimeStore((s) => s.refreshInstances);
   const setActiveTabId = useTabsStore((s) => s.setActiveTabId);
+  const availableUpdate = useUpdaterStore((s) => s.availableUpdate);
+  const updatePhase = useUpdaterStore((s) => s.phase);
+  const checkForUpdates = useUpdaterStore((s) => s.checkForUpdates);
+  const installDownloadedUpdate = useUpdaterStore(
+    (s) => s.installDownloadedUpdate,
+  );
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -328,6 +335,32 @@ export function CommandPalette() {
         <CommandSeparator />
 
         <CommandGroup heading="Appearance & System">
+          <CommandItem
+            value="system-check-for-updates-software-update"
+            onSelect={() => {
+              setOpen(false);
+              if (availableUpdate && updatePhase === "ready") {
+                void installDownloadedUpdate();
+              } else {
+                openSettings("about");
+                if (!availableUpdate) {
+                  void checkForUpdates(appStatus?.app_version ?? "0.1.0");
+                }
+              }
+            }}
+          >
+            <Sparkles className="h-3.5 w-3.5 text-[var(--status-running)]" />
+            <span>
+              {availableUpdate && updatePhase === "ready"
+                ? `Install & Restart EmbedBay v${availableUpdate.version}`
+                : availableUpdate
+                  ? `View Update v${availableUpdate.version} (What's New)`
+                  : "Check for Updates"}
+            </span>
+            <CommandShortcut>
+              {availableUpdate ? `v${availableUpdate.version}` : "About"}
+            </CommandShortcut>
+          </CommandItem>
           <CommandItem
             value="system-theme-light"
             onSelect={() => {

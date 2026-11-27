@@ -83,6 +83,26 @@ pub fn keyring_backend_name() -> &'static str {
     "Windows Credential Manager"
 }
 
+pub fn show_clickable_notification<F>(
+    app_id: &str,
+    title: &str,
+    body: &str,
+    on_click: F,
+) -> Result<(), String>
+where
+    F: Fn() + Send + 'static,
+{
+    tauri_winrt_notification::Toast::new(app_id)
+        .title(title)
+        .text1(body)
+        .on_activated(move |_action| {
+            on_click();
+            Ok(())
+        })
+        .show()
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -16,6 +16,7 @@ import { StoragePanel } from "@/components/settings/StoragePanel";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/useAppStore";
 import { useTabsStore } from "@/stores/useTabsStore";
+import { useUpdaterStore } from "@/stores/useUpdaterStore";
 import type { SettingsTabId } from "@/types/system";
 
 interface SettingsCategoryMeta {
@@ -70,6 +71,11 @@ export function SettingsModal() {
   const setActiveTab = useAppStore((s) => s.setSettingsTab);
   const appStatus = useAppStore((s) => s.appStatus);
   const profileCount = useTabsStore((s) => s.embeddingProfiles.length);
+  const updateAvailable = useUpdaterStore(
+    (s) =>
+      Boolean(s.availableUpdate) &&
+      (s.phase === "available" || s.phase === "ready"),
+  );
 
   const dialogRef = React.useRef<HTMLDialogElement | null>(null);
 
@@ -166,6 +172,13 @@ export function SettingsModal() {
                         <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-1.5 py-0.5 font-mono text-[10px] leading-none text-[var(--text-muted)]">
                           {profileCount}
                         </span>
+                      )}
+                      {cat.id === "about" && updateAvailable && (
+                        <span
+                          title="Update available"
+                          aria-label="Update available"
+                          className="h-2 w-2 rounded-full bg-[var(--status-running)]"
+                        />
                       )}
                     </button>
                   );

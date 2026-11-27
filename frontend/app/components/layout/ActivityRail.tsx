@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/useAppStore";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
 import { useTabsStore } from "@/stores/useTabsStore";
+import { useUpdaterStore } from "@/stores/useUpdaterStore";
 import type { ActivitySection } from "@/types/system";
 
 interface MenuItem {
@@ -33,6 +34,11 @@ export function ActivityRail() {
   );
   const remoteCount = useTabsStore((s) => s.remoteConnections.length);
   const setActiveTabId = useTabsStore((s) => s.setActiveTabId);
+  const updateAvailable = useUpdaterStore(
+    (s) =>
+      Boolean(s.availableUpdate) &&
+      (s.phase === "available" || s.phase === "ready"),
+  );
 
   const totalConnections = instancesCount + remoteCount;
   const isMac = appStatus?.platform.os === "macos";
@@ -133,8 +139,17 @@ export function ActivityRail() {
             />
             <span className="truncate">Settings</span>
           </span>
-          <span className="font-mono text-[10px] leading-none text-[var(--text-muted)]">
-            {settingsShortcut}
+          <span className="flex items-center gap-1.5">
+            {updateAvailable && (
+              <span
+                title="Update available"
+                aria-label="Update available"
+                className="h-2 w-2 rounded-full bg-[var(--status-running)]"
+              />
+            )}
+            <span className="font-mono text-[10px] leading-none text-[var(--text-muted)]">
+              {settingsShortcut}
+            </span>
           </span>
         </button>
       </div>

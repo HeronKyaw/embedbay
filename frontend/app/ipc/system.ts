@@ -137,3 +137,20 @@ export async function openExternalUrl(url: string): Promise<void> {
   }
   return invoke<void>("open_external_url", { url });
 }
+
+export async function prepareAppUpdateRestart(): Promise<void> {
+  if (!isTauriRuntime()) return;
+  return invoke<void>("prepare_app_update_restart");
+}
+
+export async function consumePendingOpenAbout(): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  return invoke<boolean>("consume_pending_open_about");
+}
+
+export async function fetchGitHubReleaseNotes(
+  version: string,
+): Promise<string | null> {
+  if (!isTauriRuntime()) return null;
+  return invoke<string | null>("fetch_github_release_notes", { version });
+}

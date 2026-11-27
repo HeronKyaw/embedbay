@@ -1,7 +1,14 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
+import { UpdateBanner } from "@/components/layout/UpdateBanner";
+import {
+  ReleaseNotesContent,
+  stripManualInstallerFooter,
+} from "@/components/settings/AboutUpdatesPanel";
+import { useAppStore } from "@/stores/useAppStore";
+import { useUpdaterStore } from "@/stores/useUpdaterStore";
 import {
   createDefaultMockState,
   type MockBackendState,
@@ -16,6 +23,20 @@ describe("Navigation, Onboarding, Command Palette & Settings", () => {
     state = createDefaultMockState();
     setupTauriMocks(state);
     resetAppStores({ onboardingCompleted: true });
+    useUpdaterStore.setState({
+      availableUpdate: null,
+      releaseNotes: null,
+      notesLoading: false,
+      phase: "idle",
+      downloadPercent: null,
+      downloadedBytes: 0,
+      totalBytes: 0,
+      lastCheckedAt: null,
+      statusText: "Signed updates delivered via GitHub Releases (latest.json).",
+      error: null,
+      promptOpen: false,
+      bannerDismissedVersion: null,
+    });
   });
 
   it("shows onboarding on first launch and completes into workspace", async () => {
@@ -157,5 +178,68 @@ describe("Navigation, Onboarding, Command Palette & Settings", () => {
         true,
       );
     });
+  });
+
+  it("renders formatted Markdown release notes with clickable links", async () => {
+    const user = userEvent.setup();
+    const onOpenLink = vi.fn();
+    render(
+      <ReleaseNotesContent
+        markdown={[
+          "## Bug Fixes",
+          "- **Startup:** Fixed `tray.rs` retry on reboot.",
+          "---",
+          "See [Policy](https://github.com/HeronKyaw/embedbay/blob/main/CODE_SIGNING_POLICY.md).",
+        ].join("\n")}
+        onOpenLink={onOpenLink}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Bug Fixes" })).toBeInTheDocument();
+    expect(screen.getByText("Startup:")).toBeInTheDocument();
+    expect(screen.getByText("tray.rs")).toBeInTheDocument();
+    expect(screen.queryByText(/##/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Policy" }));
+    expect(onOpenLink).toHaveBeenCalledWith(
+      "https://github.com/HeronKyaw/embedbay/blob/main/CODE_SIGNING_POLICY.md",
+    );
+
+    expect(
+      stripManualInstallerFooter(
+        "## Bug Fixes\n- Fixed startup.\n\n## Windows Installers (`x64`)\n- setup.exe",
+      ),
+    ).toBe("## Bug Fixes\n- Fixed startup.");
+  });
+
+  it("shows UpdateBanner for an available update, opens About on What's New, and can be dismissed", async () => {
+    const user = userEvent.setup();
+    useUpdaterStore.setState({
+      availableUpdate: {
+        version: "0.1.2",
+        currentVersion: "0.1.1",
+        body: "## Bug Fixes\n- **Startup:** Fixed tray launch on reboot.",
+      } as never,
+      releaseNotes: "## Bug Fixes\n- **Startup:** Fixed tray launch on reboot.",
+      phase: "available",
+      bannerDismissedVersion: null,
+    });
+
+    render(<UpdateBanner />);
+
+    expect(
+      screen.getByRole("status", { name: "Application Update Available" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/EmbedBay v0\.1\.2 is available/i)).toBeInTheDocument();
+    expect(screen.getByText(/Startup: Fixed tray launch on reboot\./i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "What's New" }));
+    expect(useAppStore.getState().settingsOpen).toBe(true);
+    expect(useAppStore.getState().settingsTab).toBe("about");
+
+    await user.click(screen.getByRole("button", { name: "Dismiss update banner" }));
+    expect(
+      screen.queryByRole("status", { name: "Application Update Available" }),
+    ).not.toBeInTheDocument();
   });
 });

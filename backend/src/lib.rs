@@ -45,6 +45,7 @@ pub fn run() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_single_instance::init(|app_handle, args, _cwd| {
             // If a second launch happens without --minimized, open or focus the UI window.
             if !args.iter().any(|arg| arg == "--minimized") {
@@ -93,6 +94,16 @@ pub fn run() {
                 .as_deref()
                 != Some("quit");
 
+            let force_show_after_update = db
+                .get_app_setting("post_update_show_window")
+                .ok()
+                .flatten()
+                .as_deref()
+                == Some("1");
+            if force_show_after_update {
+                let _ = db.set_app_setting("post_update_show_window", "0");
+            }
+
             app.manage(AppState {
                 db,
                 manifest,
@@ -115,10 +126,94 @@ pub fn run() {
                 }
             }
 
-            supervisor::tray::setup_tray_with_retry(app.handle(), start_minimized);
+            supervisor::tray::setup_tray_with_retry(
+                app.handle(),
+                start_minimized && !force_show_after_update,
+            );
 
-            if !start_minimized {
+            if !start_minimized || force_show_after_update {
                 supervisor::tray::open_or_focus_main_window(app.handle())?;
+            } else {
+                #[cfg(desktop)]
+                {
+                    let handle_bg = app.handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        use tauri_plugin_updater::UpdaterExt;
+
+                        // Wait briefly after OS login so networking and shell notifications are ready.
+                        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                        if handle_bg.get_webview_window("main").is_some() {
+                            return;
+                        }
+                        let Ok(updater) = handle_bg.updater() else {
+                            return;
+                        };
+                        let Ok(Some(update)) = updater.check().await else {
+                            return;
+                        };
+
+                        if let Some(tray) = handle_bg.tray_by_id("embedbay-tray") {
+                            let _ = tray.set_tooltip(Some(format!(
+                                "EmbedBay — Update v{} available",
+                                update.version
+                            )));
+                        }
+
+                        let state = handle_bg.state::<AppState>();
+                        let already_notified = state
+                            .db
+                            .get_app_setting("last_notified_update_version")
+                            .ok()
+                            .flatten()
+                            .as_deref()
+                            == Some(update.version.as_str());
+
+                        if !already_notified {
+                            let title = format!("EmbedBay v{} is available", update.version);
+                            let body =
+                                "Click to open EmbedBay, view What's New, and update.";
+
+                            #[cfg(target_os = "windows")]
+                            {
+                                let app_id = handle_bg.config().identifier.clone();
+                                let open_handle = handle_bg.clone();
+                                let _ = platform::show_clickable_notification(
+                                    &app_id,
+                                    &title,
+                                    body,
+                                    move || {
+                                        let h = open_handle.clone();
+                                        let _ = open_handle.run_on_main_thread(move || {
+                                            if let Some(st) = h.try_state::<AppState>() {
+                                                let _ = st
+                                                    .db
+                                                    .set_app_setting("open_about_on_launch", "1");
+                                            }
+                                            let _ =
+                                                supervisor::tray::open_or_focus_main_window(&h);
+                                            let _ = h.emit("embedbay://open-update-about", ());
+                                        });
+                                    },
+                                );
+                            }
+
+                            #[cfg(not(target_os = "windows"))]
+                            {
+                                use tauri_plugin_notification::NotificationExt;
+                                let _ = handle_bg
+                                    .notification()
+                                    .builder()
+                                    .title(title)
+                                    .body(body)
+                                    .show();
+                            }
+
+                            let _ = state
+                                .db
+                                .set_app_setting("last_notified_update_version", &update.version);
+                        }
+                    });
+                }
             }
 
             Ok(())
@@ -132,6 +227,9 @@ pub fn run() {
             commands::get_diagnostics,
             commands::open_data_path,
             commands::open_external_url,
+            commands::prepare_app_update_restart,
+            commands::consume_pending_open_about,
+            commands::fetch_github_release_notes,
             commands::engines::list_engine_catalog,
             commands::engines::refresh_engine_catalog,
             commands::engines::list_installed_engines,

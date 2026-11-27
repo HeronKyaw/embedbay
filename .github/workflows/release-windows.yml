@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -51,6 +53,59 @@ jobs:
       - name: Build frontend assets
         run: npm --prefix frontend run build
 
+      - name: Prepare release notes from CHANGELOG.md
+        id: release_notes
+        shell: pwsh
+        run: |
+          $conf = Get-Content backend/tauri.conf.json -Raw | ConvertFrom-Json
+          $version = $conf.version
+          $section = ""
+
+          if (Test-Path CHANGELOG.md) {
+            $lines = Get-Content CHANGELOG.md
+            $inSection = $false
+            $buf = New-Object System.Collections.Generic.List[string]
+            foreach ($line in $lines) {
+              if ($line -match "^##\s+v?$([regex]::Escape($version))(\s|$)") {
+                $inSection = $true
+                continue
+              }
+              if ($inSection -and $line -match "^##\s+") {
+                break
+              }
+              if ($inSection) {
+                $buf.Add($line)
+              }
+            }
+            $section = ($buf -join "`n").Trim()
+          }
+
+          if (-not $section) {
+            $prevTag = git describe --tags --abbrev=0 HEAD^ 2>$null
+            if ($prevTag) {
+              $commits = git log "$prevTag..HEAD" --pretty=format:"- %s" --no-merges
+            } else {
+              $commits = git log -n 10 --pretty=format:"- %s" --no-merges
+            }
+            $section = "### Changes`n" + ($commits -join "`n")
+          }
+
+          $footer = @"
+
+          ---
+          ### Windows Installers (``x64``)
+          - **Recommended (Per-User, no admin prompt):** ``EmbedBay_${version}_x64-setup.exe`` (NSIS)
+          - **Enterprise / MSI:** ``EmbedBay_${version}_x64_en-US.msi`` (WiX)
+
+          Requires Windows 10/11 (``x86_64``) and Microsoft Edge WebView2 Runtime. In-app updates are Ed25519-verified; see [CODE_SIGNING_POLICY.md](https://github.com/HeronKyaw/embedbay/blob/main/CODE_SIGNING_POLICY.md).
+          "@
+
+          $body = "$section`n$footer"
+          $delimiter = "EOF_RELEASE_NOTES"
+          "body<<$delimiter" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $body | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $delimiter | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Build & Bundle Windows Installers via tauri-action
         uses: tauri-apps/tauri-action@v0
         env:
@@ -65,15 +120,7 @@ jobs:
           tauriScript: ..\node_modules\.bin\tauri.cmd
           tagName: v__VERSION__
           releaseName: "EmbedBay v__VERSION__"
-          releaseBody: |
-            ## Windows Installers (`x64`)
-            - **Recommended (Per-User, no admin prompt):** `EmbedBay_*_x64-setup.exe` (NSIS)
-            - **Enterprise / MSI:** `EmbedBay_*_x64_en-US.msi` (WiX)
-
-            Requires Windows 10/11 (`x86_64`) and Microsoft Edge WebView2 Runtime.
-
-            ---
-            **Integrity & Privacy:** Installers are built directly from this tagged commit via GitHub Actions. If Windows SmartScreen warns on first launch (unsigned community build), click **More info → Run anyway**. In-app updates are Ed25519-verified and engine binaries are SHA-256-verified. Zero telemetry; see [CODE_SIGNING_POLICY.md](https://github.com/HeronKyaw/embedbay/blob/main/CODE_SIGNING_POLICY.md).
+          releaseBody: ${{ steps.release_notes.outputs.body }}
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true

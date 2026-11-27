@@ -195,6 +195,79 @@ pub fn open_external_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn prepare_app_update_restart(state: State<'_, AppState>) -> Result<(), String> {
+    let _ = state.process_manager.stop_all_instances().await;
+    state
+        .db
+        .set_app_setting("post_update_show_window", "1")
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn consume_pending_open_about(state: State<'_, AppState>) -> Result<bool, String> {
+    let pending = state
+        .db
+        .get_app_setting("open_about_on_launch")
+        .ok()
+        .flatten()
+        .as_deref()
+        == Some("1");
+    if pending {
+        let _ = state.db.set_app_setting("open_about_on_launch", "0");
+    }
+    Ok(pending)
+}
+
+pub fn sanitize_release_tag(raw_version: &str) -> Result<String, String> {
+    let trimmed = raw_version.trim().trim_start_matches(['v', 'V']);
+    if trimmed.is_empty()
+        || trimmed.len() > 64
+        || trimmed.contains("..")
+        || !trimmed
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+    {
+        return Err(format!("Invalid release version '{raw_version}'"));
+    }
+    Ok(format!("v{trimmed}"))
+}
+
+#[tauri::command]
+pub async fn fetch_github_release_notes(version: String) -> Result<Option<String>, String> {
+    let tag = sanitize_release_tag(&version)?;
+    let url = format!("https://api.github.com/repos/HeronKyaw/embedbay/releases/tags/{tag}");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .user_agent(format!("EmbedBay/{}", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = match client
+        .get(&url)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => r,
+        _ => return Ok(None),
+    };
+
+    let payload: serde_json::Value = match resp.json().await {
+        Ok(v) => v,
+        Err(_) => return Ok(None),
+    };
+
+    let body = payload
+        .get("body")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToOwned::to_owned);
+
+    Ok(body)
+}
+
+#[tauri::command]
 pub async fn get_diagnostics(state: State<'_, AppState>) -> Result<DiagnosticsReport, String> {
     let metrics_summary = state.process_manager.get_all_instance_metrics().await?;
     let database = state.db.sqlite_diagnostics().map_err(|e| e.to_string())?;
@@ -304,5 +377,15 @@ mod tests {
         assert_eq!(normalize_close_behavior(" QUIT ").expect("quit"), "quit");
         assert!(normalize_close_behavior("minimize").is_err());
         assert!(normalize_close_behavior("").is_err());
+    }
+
+    #[test]
+    fn sanitize_release_tag_accepts_semver_and_rejects_traversal() {
+        assert_eq!(sanitize_release_tag("0.1.2").expect("semver"), "v0.1.2");
+        assert_eq!(sanitize_release_tag("v0.1.2-beta.1").expect("prefixed"), "v0.1.2-beta.1");
+        assert!(sanitize_release_tag("").is_err());
+        assert!(sanitize_release_tag("../0.1.2").is_err());
+        assert!(sanitize_release_tag("0.1.2/foo").is_err());
+        assert!(sanitize_release_tag("0.1.2?x=1").is_err());
     }
 }

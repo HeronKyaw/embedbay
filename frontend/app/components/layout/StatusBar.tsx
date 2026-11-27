@@ -11,10 +11,13 @@ import {
   HardDrive,
   Pause,
   Play,
+  RotateCw,
+  Sparkles,
   Square,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { stopAllInstances } from "@/ipc/instances";
 import { isEmbeddedEngine } from "@/lib/engineVersions";
@@ -23,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/useAppStore";
 import { useRuntimeStore } from "@/stores/useRuntimeStore";
 import { useTabsStore } from "@/stores/useTabsStore";
+import { useUpdaterStore } from "@/stores/useUpdaterStore";
 
 function utilizationBarClass(percent: number): string {
   if (percent >= 85) return "bg-[var(--status-error)]";
@@ -75,6 +79,18 @@ export function StatusBar() {
   const activeSection = useAppStore((s) => s.activeSection);
   const setActiveSection = useAppStore((s) => s.setActiveSection);
   const openStoreEngine = useAppStore((s) => s.openStoreEngine);
+  const openSettings = useAppStore((s) => s.openSettings);
+
+  const appUpdate = useUpdaterStore((s) => s.availableUpdate);
+  const appUpdatePhase = useUpdaterStore((s) => s.phase);
+  const appUpdatePercent = useUpdaterStore((s) => s.downloadPercent);
+  const appUpdateDownloadedBytes = useUpdaterStore((s) => s.downloadedBytes);
+  const appUpdateTotalBytes = useUpdaterStore((s) => s.totalBytes);
+  const appUpdatePromptOpen = useUpdaterStore((s) => s.promptOpen);
+  const installDownloadedUpdate = useUpdaterStore(
+    (s) => s.installDownloadedUpdate,
+  );
+  const deferInstall = useUpdaterStore((s) => s.deferInstall);
 
   const catalog = useRuntimeStore((s) => s.catalog);
   const instances = useRuntimeStore((s) => s.instances);
@@ -103,11 +119,20 @@ export function StatusBar() {
     [activeInstalls],
   );
 
+  const hasAppUpdateDownload = Boolean(
+    appUpdate &&
+      (appUpdatePhase === "downloading" ||
+        appUpdatePhase === "ready" ||
+        appUpdatePhase === "installing"),
+  );
+  const totalDownloadsCount =
+    activeInstallList.length + (hasAppUpdateDownload ? 1 : 0);
+
   React.useEffect(() => {
-    if (activeInstallList.length === 0) {
+    if (totalDownloadsCount === 0) {
       setDownloadsOpen(false);
     }
-  }, [activeInstallList.length]);
+  }, [totalDownloadsCount]);
 
   React.useEffect(() => {
     if (!popoverOpen && !downloadsOpen) return;
@@ -309,7 +334,7 @@ export function StatusBar() {
 
       {/* Right: Downloads Tracker + Docker-Style Host & Managed DB Resource Cluster */}
       <div className="flex items-center gap-2">
-        {activeInstallList.length > 0 && (
+        {totalDownloadsCount > 0 && (
           <button
             type="button"
             onClick={() => {
@@ -317,34 +342,58 @@ export function StatusBar() {
               setPopoverOpen(false);
             }}
             aria-expanded={downloadsOpen}
-            aria-label="Active Engine Downloads"
+            aria-label={
+              activeInstallList.length > 0
+                ? "Active Engine Downloads"
+                : "Active Downloads"
+            }
             className={cn(
               "inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[10px] transition-colors cursor-pointer",
-              downloadsOpen
-                ? "border-[var(--accent-primary)] bg-[var(--accent-primary)]/15 text-[var(--accent-primary)]"
-                : "border-[var(--accent-primary)]/40 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/20",
+              hasAppUpdateDownload &&
+                appUpdatePhase === "ready" &&
+                activeInstallList.length === 0
+                ? downloadsOpen
+                  ? "border-[var(--status-running)] bg-[var(--status-running)]/20 text-[var(--status-running)]"
+                  : "border-[var(--status-running)]/40 bg-[var(--status-running)]/10 text-[var(--status-running)] hover:bg-[var(--status-running)]/20"
+                : downloadsOpen
+                  ? "border-[var(--accent-primary)] bg-[var(--accent-primary)]/15 text-[var(--accent-primary)]"
+                  : "border-[var(--accent-primary)]/40 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/20",
             )}
           >
-            <Download
-              className={cn(
-                "h-3 w-3",
-                activeInstallList.some((d) => d.stage !== "paused") &&
-                  "animate-pulse",
-              )}
-            />
+            {hasAppUpdateDownload &&
+            appUpdatePhase === "ready" &&
+            activeInstallList.length === 0 ? (
+              <Sparkles className="h-3 w-3" />
+            ) : (
+              <Download
+                className={cn(
+                  "h-3 w-3",
+                  (activeInstallList.some((d) => d.stage !== "paused") ||
+                    appUpdatePhase === "downloading" ||
+                    appUpdatePhase === "installing") &&
+                    "animate-pulse",
+                )}
+              />
+            )}
             <span>
-              {activeInstallList.length === 1
-                ? `${
-                    catalog.find(
-                      (c) =>
-                        c.engine_type === activeInstallList[0].engine_type,
-                    )?.display_name ?? activeInstallList[0].engine_type
-                  } ${
-                    activeInstallList[0].stage === "paused"
-                      ? "(Paused)"
-                      : `${Math.round(activeInstallList[0].percent)}%`
-                  }`
-                : `${activeInstallList.length} Downloads`}
+              {totalDownloadsCount === 1 && hasAppUpdateDownload && appUpdate
+                ? appUpdatePhase === "ready"
+                  ? `Update v${appUpdate.version} ready`
+                  : appUpdatePhase === "installing"
+                    ? `Updating v${appUpdate.version}...`
+                    : `EmbedBay v${appUpdate.version} ${Math.round(appUpdatePercent ?? 0)}%`
+                : totalDownloadsCount === 1 && activeInstallList.length === 1
+                  ? `${
+                      catalog.find(
+                        (c) =>
+                          c.engine_type === activeInstallList[0].engine_type,
+                      )?.display_name ?? activeInstallList[0].engine_type
+                    } ${
+                      activeInstallList[0].stage === "paused"
+                        ? "(Paused)"
+                        : `${Math.round(activeInstallList[0].percent)}%`
+                    }`
+                  : `${totalDownloadsCount} Downloads`}
             </span>
           </button>
         )}
@@ -409,15 +458,17 @@ export function StatusBar() {
       </div>
 
       {/* Active Downloads Popover */}
-      {downloadsOpen && activeInstallList.length > 0 && (
+      {downloadsOpen && totalDownloadsCount > 0 && (
         <div
           role="dialog"
-          aria-label="Engine Downloads"
+          aria-label={
+            activeInstallList.length > 0 ? "Engine Downloads" : "Downloads"
+          }
           className="absolute right-3 bottom-8 z-50 w-[360px] rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-3.5 shadow-2xl select-text"
         >
           <div className="mb-2.5 flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
-              Engine Downloads ({activeInstallList.length})
+              Downloads ({totalDownloadsCount})
             </span>
             <button
               type="button"
@@ -429,6 +480,65 @@ export function StatusBar() {
             </button>
           </div>
           <div className="max-h-60 space-y-2.5 overflow-y-auto">
+            {hasAppUpdateDownload && appUpdate && (
+              <div className="space-y-1.5 rounded-lg border border-[var(--status-running)]/30 bg-[var(--bg-surface)] p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDownloadsOpen(false);
+                      openSettings("about");
+                    }}
+                    className="min-w-0 truncate text-left text-xs font-semibold text-[var(--text-primary)] hover:text-[var(--accent-primary)] cursor-pointer"
+                  >
+                    EmbedBay v{appUpdate.version} (App Update)
+                  </button>
+                  <span className="shrink-0 font-mono text-[10px] text-[var(--status-running)]">
+                    {appUpdatePhase === "ready"
+                      ? "Ready"
+                      : appUpdatePhase === "installing"
+                        ? "Installing..."
+                        : `${Math.round(appUpdatePercent ?? 0)}%`}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-canvas)]">
+                  <div
+                    className={cn(
+                      "h-full transition-all duration-150",
+                      appUpdatePhase === "ready"
+                        ? "bg-[var(--status-running)]"
+                        : "bg-[var(--accent-primary)]",
+                    )}
+                    style={{
+                      width: `${Math.min(100, Math.max(4, appUpdatePhase === "ready" ? 100 : (appUpdatePercent ?? 10)))}%`,
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-mono text-[10px] text-[var(--text-muted)]">
+                    {appUpdatePhase === "ready"
+                      ? "Downloaded & verified"
+                      : appUpdateTotalBytes > 0
+                        ? `${formatBytes(appUpdateDownloadedBytes)} / ${formatBytes(appUpdateTotalBytes)}`
+                        : "Downloading signed installer..."}
+                  </span>
+                  {appUpdatePhase === "ready" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-6 px-2 text-[10px]"
+                      onClick={() => {
+                        setDownloadsOpen(false);
+                        void installDownloadedUpdate();
+                      }}
+                    >
+                      <RotateCw className="h-2.5 w-2.5" />
+                      Install & Restart
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
             {activeInstallList.map((dl) => {
               const displayName =
                 catalog.find((c) => c.engine_type === dl.engine_type)
@@ -704,6 +814,40 @@ export function StatusBar() {
           </div>
         </div>
       )}
+      {/* App Update Ready Prompt */}
+      <Dialog
+        open={Boolean(appUpdatePromptOpen && appUpdate && appUpdatePhase === "ready")}
+        onOpenChange={(open) => {
+          if (!open) deferInstall();
+        }}
+        title={`EmbedBay v${appUpdate?.version ?? ""} Ready to Install`}
+        description={
+          runningCount > 0
+            ? `The signed update finished downloading. ${runningCount} running database service(s) will be stopped safely before restarting, or you can install later from the Status Bar or Settings → About.`
+            : "The signed update finished downloading. Restart EmbedBay now to apply it, or install it later from the Status Bar or Settings → About."
+        }
+        icon={<Sparkles className="h-4 w-4 text-[var(--status-running)]" />}
+        maxWidthClass="w-[440px]"
+      >
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => deferInstall()}
+          >
+            Later
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void installDownloadedUpdate()}
+          >
+            <RotateCw className="h-3.5 w-3.5" />
+            Install & Restart Now
+          </Button>
+        </div>
+      </Dialog>
     </footer>
   );
 }

@@ -136,6 +136,20 @@ pub fn keyring_backend_name() -> &'static str {
     os_impl::keyring_backend_name()
 }
 
+/// Shows a Windows toast notification that invokes `on_click` when activated by the user.
+#[cfg(target_os = "windows")]
+pub fn show_clickable_notification<F>(
+    app_id: &str,
+    title: &str,
+    body: &str,
+    on_click: F,
+) -> Result<(), String>
+where
+    F: Fn() + Send + 'static,
+{
+    os_impl::show_clickable_notification(app_id, title, body, on_click)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
