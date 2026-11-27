@@ -287,4 +287,61 @@ describe("Full-Module & Adversarial End-User Edge Cases", () => {
       await screen.findByText(/Windows Credential Manager/i),
     ).toBeInTheDocument();
   });
+
+  it("allows clearing group to Ungrouped while running, disables runtime fields, and suppresses own-port In Use warning", async () => {
+    state.groups = [
+      {
+        id: "grp-1",
+        name: "Dev Group",
+        color: "#14B8A6",
+        icon: "Folder",
+        sort_order: 0,
+        is_collapsed: false,
+      },
+    ];
+    state.instances[0].group_id = "grp-1";
+    const user = userEvent.setup();
+    render(<App />);
+
+    const nav = await screen.findByLabelText("Primary Navigation");
+    await user.click(
+      within(nav).getByRole("button", { name: /Local Runtimes/i }),
+    );
+    expect(await screen.findByText("Local Qdrant Dev")).toBeInTheDocument();
+
+    // Edit running instance
+    await user.click(screen.getByTitle("Edit / Rename Instance"));
+    const dialog = await screen.findByRole("dialog");
+
+    // Running banner shown, own port should NOT show "In Use"
+    expect(
+      within(dialog).getByText(/This instance is running/i),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText("Current port")).toBeInTheDocument();
+    expect(within(dialog).queryByText("In Use")).not.toBeInTheDocument();
+
+    // Runtime-critical inputs are disabled while running
+    const portInput = within(dialog).getByDisplayValue("6333");
+    expect(portInput).toBeDisabled();
+    const hostInput = within(dialog).getByDisplayValue("127.0.0.1");
+    expect(hostInput).toBeDisabled();
+
+    // Group selector remains enabled; change from Dev Group -> Ungrouped ("")
+    const groupSelect = within(dialog).getByDisplayValue("Dev Group");
+    expect(groupSelect).toBeEnabled();
+    await user.selectOptions(groupSelect, "");
+
+    await user.click(
+      within(dialog).getByRole("button", { name: /Save Instance/i }),
+    );
+
+    await waitFor(() => {
+      const updateCall = state.calls.find((c) => c.cmd === "update_instance");
+      expect(updateCall).toBeDefined();
+      const payload = updateCall!.args.payload as Record<string, unknown>;
+      expect(payload.group_id).toBeNull();
+      expect(payload.port).toBeUndefined();
+      expect(payload.host).toBeUndefined();
+    });
+  });
 });

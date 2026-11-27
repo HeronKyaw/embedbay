@@ -42,15 +42,36 @@ pub async fn update_instance(
     id: String,
     payload: UpdateInstancePayload,
 ) -> Result<InstanceRecord, String> {
-    let needs_stop = payload.port.is_some()
-        || payload.grpc_port.is_some()
-        || payload.host.is_some()
-        || payload.engine_version.is_some()
-        || payload.data_dir.is_some()
-        || payload.config_json.is_some();
+    let existing = state
+        .db
+        .get_instance(&id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("Instance '{}' not found", id))?;
+
+    let needs_stop = payload.port.is_some_and(|p| p != existing.port)
+        || payload.grpc_port.is_some_and(|g| g != existing.grpc_port)
+        || payload
+            .host
+            .as_deref()
+            .is_some_and(|h| h.trim() != existing.host)
+        || payload
+            .engine_version
+            .as_deref()
+            .is_some_and(|v| v != existing.engine_version)
+        || payload
+            .data_dir
+            .as_deref()
+            .is_some_and(|d| d.trim() != existing.data_dir)
+        || payload
+            .config_json
+            .as_deref()
+            .is_some_and(|c| c != existing.config_json);
 
     if needs_stop && state.process_manager.is_instance_running(&id).await {
-        return Err("Stop the instance before changing host, port, version, or data directory.".to_string());
+        return Err(
+            "Stop the instance before changing host, port, version, config, or data directory."
+                .to_string(),
+        );
     }
 
     state

@@ -43,6 +43,7 @@ export function CreateInstanceModal({
   const catalog = useRuntimeStore((s) => s.catalog);
   const installedEngines = useRuntimeStore((s) => s.installedEngines);
   const instances = useRuntimeStore((s) => s.instances);
+  const metrics = useRuntimeStore((s) => s.metrics);
   const groups = useRuntimeStore((s) => s.groups);
   const refreshInstances = useRuntimeStore((s) => s.refreshInstances);
   const openStoreEngine = useAppStore((s) => s.openStoreEngine);
@@ -77,6 +78,20 @@ export function CreateInstanceModal({
       engineType === "duckdb");
   const isBuiltInEmbedded =
     isEmbedded && (catalogEntry?.versions[0]?.size_bytes ?? 0) === 0;
+  const editingStatus = editing ? (metrics[editing.id]?.status ?? "stopped") : null;
+  const isEditingRunning = Boolean(
+    editing &&
+      !isEmbedded &&
+      (editingStatus === "running" ||
+        editingStatus === "starting" ||
+        editingStatus === "stopping"),
+  );
+  const isOwnCurrentPort = Boolean(
+    editing &&
+      !isEmbedded &&
+      port === editing.port &&
+      (host.trim() || "127.0.0.1") === editing.host,
+  );
   const trimmedName = name.trim();
   const nameConflict =
     trimmedName.length > 0 &&
@@ -181,7 +196,7 @@ export function CreateInstanceModal({
   };
 
   React.useEffect(() => {
-    if (!open || isEmbedded || port <= 0) {
+    if (!open || isEmbedded || port <= 0 || isOwnCurrentPort) {
       setPortAvailable(null);
       return;
     }
@@ -192,7 +207,7 @@ export function CreateInstanceModal({
     return () => {
       active = false;
     };
-  }, [open, host, port, isEmbedded]);
+  }, [open, host, port, isEmbedded, isOwnCurrentPort]);
 
   const handleAutoPickPort = async () => {
     try {
@@ -240,21 +255,34 @@ export function CreateInstanceModal({
         !isEmbedded && grpcPort.trim() ? Number(grpcPort.trim()) : null;
 
       if (editing) {
-        await updateInstance(editing.id, {
-          name: name.trim(),
-          description: description.trim() || null,
-          color,
-          group_id: groupId || null,
-          engine_version: engineVersion || editing.engine_version,
-          host: host.trim() || "127.0.0.1",
-          port: isEmbedded ? 0 : port,
-          grpc_port: parsedGrpc,
-          data_dir: dataDir.trim() || undefined,
-          config_json: configJson.trim() || "{}",
-          auto_start: autoStart,
-          idle_timeout_minutes: idleTimeoutMinutes,
-          tag_ids: selectedTags,
-        });
+        await updateInstance(
+          editing.id,
+          isEditingRunning
+            ? {
+                name: name.trim(),
+                description: description.trim() || null,
+                color,
+                group_id: groupId || null,
+                auto_start: autoStart,
+                idle_timeout_minutes: idleTimeoutMinutes,
+                tag_ids: selectedTags,
+              }
+            : {
+                name: name.trim(),
+                description: description.trim() || null,
+                color,
+                group_id: groupId || null,
+                engine_version: engineVersion || editing.engine_version,
+                host: host.trim() || "127.0.0.1",
+                port: isEmbedded ? 0 : port,
+                grpc_port: parsedGrpc,
+                data_dir: dataDir.trim() || undefined,
+                config_json: configJson.trim() || "{}",
+                auto_start: autoStart,
+                idle_timeout_minutes: idleTimeoutMinutes,
+                tag_ids: selectedTags,
+              },
+        );
         toast.success(`Updated instance "${name.trim()}"`);
       } else {
         await createInstance({
@@ -303,6 +331,18 @@ export function CreateInstanceModal({
       maxWidthClass="w-[580px]"
     >
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+        {isEditingRunning && (
+          <div className="flex items-start gap-2 rounded-lg border border-[var(--status-starting)]/40 bg-[var(--status-starting)]/10 px-3 py-2 text-[11px] leading-relaxed text-[var(--text-primary)]">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--status-starting)]" />
+            <span>
+              This instance is running. You can edit{" "}
+              <strong>Name, Group, Description, Color, Tags, Auto-Start</strong>
+              , and <strong>Idle Auto-Stop</strong> live; stop the instance to
+              change Version, Host, Ports, Data Directory, or Config JSON.
+            </span>
+          </div>
+        )}
+
         {/* Engine & Version */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -335,8 +375,9 @@ export function CreateInstanceModal({
             ) : installedForEngine.length > 0 ? (
               <select
                 value={engineVersion}
+                disabled={isEditingRunning}
                 onChange={(e) => setEngineVersion(e.target.value)}
-                className="h-8 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2 font-mono text-xs text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+                className="h-8 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2 font-mono text-xs text-[var(--text-primary)] disabled:opacity-60 disabled:cursor-not-allowed focus:border-[var(--accent-primary)] focus:outline-none"
               >
                 {installedForEngine.map((v) => (
                   <option key={v.id} value={v.version}>
@@ -430,24 +471,28 @@ export function CreateInstanceModal({
                 <input
                   type="text"
                   value={host}
+                  disabled={isEditingRunning}
                   onChange={(e) => setHost(e.target.value)}
-                  className="h-8 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2.5 font-mono text-xs text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+                  className="h-8 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2.5 font-mono text-xs text-[var(--text-primary)] disabled:opacity-60 disabled:cursor-not-allowed focus:border-[var(--accent-primary)] focus:outline-none"
                 />
               </div>
 
               <div>
                 <label className="mb-1 flex items-center justify-between text-[11px] font-medium text-[var(--text-secondary)]">
                   <span>HTTP Port</span>
-                  {portAvailable === true && (
+                  {isOwnCurrentPort && isEditingRunning ? (
+                    <span className="text-[10px] text-[var(--accent-primary)]">
+                      Current port
+                    </span>
+                  ) : portAvailable === true ? (
                     <span className="inline-flex items-center gap-0.5 text-[10px] text-[var(--status-running)]">
                       <CheckCircle2 className="h-2.5 w-2.5" /> Free
                     </span>
-                  )}
-                  {portAvailable === false && (
+                  ) : portAvailable === false ? (
                     <span className="inline-flex items-center gap-0.5 text-[10px] text-[var(--status-error)]">
                       <AlertTriangle className="h-2.5 w-2.5" /> In Use
                     </span>
-                  )}
+                  ) : null}
                 </label>
                 <div className="flex gap-1">
                   <input
@@ -455,13 +500,15 @@ export function CreateInstanceModal({
                     min={1}
                     max={65535}
                     value={port}
+                    disabled={isEditingRunning}
                     onChange={(e) => setPort(Number(e.target.value))}
-                    className="h-8 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2 font-mono text-xs text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+                    className="h-8 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2 font-mono text-xs text-[var(--text-primary)] disabled:opacity-60 disabled:cursor-not-allowed focus:border-[var(--accent-primary)] focus:outline-none"
                   />
                   <Button
                     type="button"
                     variant="secondary"
                     size="icon"
+                    disabled={isEditingRunning}
                     title="Auto-Pick Free Port"
                     onClick={() => void handleAutoPickPort()}
                   >
@@ -479,9 +526,10 @@ export function CreateInstanceModal({
                   min={0}
                   max={65535}
                   value={grpcPort}
+                  disabled={isEditingRunning}
                   onChange={(e) => setGrpcPort(e.target.value)}
                   placeholder="None"
-                  className="h-8 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2 font-mono text-xs text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+                  className="h-8 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2 font-mono text-xs text-[var(--text-primary)] disabled:opacity-60 disabled:cursor-not-allowed focus:border-[var(--accent-primary)] focus:outline-none"
                 />
               </div>
             </div>
@@ -508,6 +556,7 @@ export function CreateInstanceModal({
             <input
               type="text"
               value={dataDir}
+              disabled={isEditingRunning}
               onChange={(e) => setDataDir(e.target.value)}
               placeholder={
                 engineType === "lancedb"
@@ -518,13 +567,14 @@ export function CreateInstanceModal({
                       ? "Select or enter folder for vectors.duckdb..."
                       : "%LOCALAPPDATA%\\EmbedBay\\instances\\<id>\\data"
               }
-              className="h-8 flex-1 rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2.5 font-mono text-[11px] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+              className="h-8 flex-1 rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] px-2.5 font-mono text-[11px] text-[var(--text-primary)] disabled:opacity-60 disabled:cursor-not-allowed focus:border-[var(--accent-primary)] focus:outline-none"
             />
             {onPickDirectory && (
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
+                disabled={isEditingRunning}
                 onClick={() => {
                   void onPickDirectory(dataDir).then((picked) => {
                     if (picked) setDataDir(picked);
@@ -630,8 +680,9 @@ export function CreateInstanceModal({
           <textarea
             rows={2}
             value={configJson}
+            disabled={isEditingRunning}
             onChange={(e) => setConfigJson(e.target.value)}
-            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] p-2 font-mono text-[11px] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-canvas)] p-2 font-mono text-[11px] text-[var(--text-primary)] disabled:opacity-60 disabled:cursor-not-allowed focus:border-[var(--accent-primary)] focus:outline-none"
           />
         </div>
 

@@ -88,12 +88,16 @@ pub struct CreateInstancePayload {
 #[derive(Debug, Clone, Deserialize)]
 pub struct UpdateInstancePayload {
     pub name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
     pub description: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
     pub color: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
     pub group_id: Option<Option<String>>,
     pub engine_version: Option<String>,
     pub host: Option<String>,
     pub port: Option<u16>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
     pub grpc_port: Option<Option<u16>>,
     pub data_dir: Option<String>,
     pub config_json: Option<String>,
@@ -108,6 +112,7 @@ pub struct ReorderItem {
     pub entity_type: String,
     pub id: String,
     pub sort_order: i64,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
     pub group_id: Option<Option<String>>,
 }
 
@@ -148,12 +153,16 @@ pub struct CreateRemoteConnectionPayload {
 #[derive(Debug, Clone, Deserialize)]
 pub struct UpdateRemoteConnectionPayload {
     pub name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
     pub description: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
     pub color: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
     pub group_id: Option<Option<String>>,
     pub engine_type: Option<String>,
     pub endpoint_url: Option<String>,
     pub auth_type: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
     pub secret: Option<Option<String>>,
     pub extra_json: Option<String>,
     pub read_only: Option<bool>,

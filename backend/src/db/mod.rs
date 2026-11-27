@@ -608,4 +608,51 @@ mod tests {
             Some("tray".to_string())
         );
     }
+
+    #[test]
+    fn update_instance_payload_deserializes_explicit_null_to_clear_group() {
+        use crate::db::models::*;
+
+        let parsed: UpdateInstancePayload =
+            serde_json::from_str(r#"{"group_id": null, "description": null}"#)
+                .expect("deserialize double option");
+        assert_eq!(parsed.group_id, Some(None));
+        assert_eq!(parsed.description, Some(None));
+        assert_eq!(parsed.grpc_port, None);
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let db = Database::init(dir.path().to_path_buf()).expect("db init");
+        let group = db
+            .create_group(CreateGroupPayload {
+                name: "Dev".to_string(),
+                color: None,
+                icon: None,
+            })
+            .expect("create group");
+        let inst = db
+            .create_instance(CreateInstancePayload {
+                name: "Inst".to_string(),
+                description: Some("Notes".to_string()),
+                color: None,
+                group_id: Some(group.id),
+                engine_type: "qdrant".to_string(),
+                engine_version: "1.17.0".to_string(),
+                host: Some("127.0.0.1".to_string()),
+                port: 6333,
+                grpc_port: None,
+                data_dir: None,
+                config_json: None,
+                auto_start: None,
+                idle_timeout_minutes: None,
+                tag_ids: None,
+            })
+            .expect("create instance");
+        assert!(inst.group_id.is_some());
+
+        let updated = db
+            .update_instance(&inst.id, parsed)
+            .expect("update instance");
+        assert_eq!(updated.group_id, None);
+        assert_eq!(updated.description, None);
+    }
 }
