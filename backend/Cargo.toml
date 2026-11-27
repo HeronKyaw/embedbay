@@ -1,6 +1,6 @@
 [package]
 name = "embedbay"
-version = "0.1.1"
+version = "0.1.2"
 description = "Local Vector DB Manager & Explorer"
 authors = ["EmbedBay"]
 license = "MIT"
