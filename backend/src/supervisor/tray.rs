@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{App, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::AppState;
 
@@ -34,7 +34,7 @@ pub fn open_or_focus_main_window(app: &AppHandle) -> tauri::Result<()> {
 }
 
 /// Initializes the persistent System Tray / Menu Bar supervisor icon and context menu.
-pub fn setup_tray(app: &App) -> tauri::Result<()> {
+pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let icon = Image::from_bytes(TRAY_ICON_BYTES)?;
 
     let open_item = MenuItem::with_id(app, "open", "Open EmbedBay", true, None::<&str>)?;
@@ -107,4 +107,35 @@ pub fn setup_tray(app: &App) -> tauri::Result<()> {
         .build(app)?;
 
     Ok(())
+}
+
+/// Creates the tray icon, retrying in the background when the shell is not ready yet
+/// (common right after logon, before Explorer's taskbar exists).
+/// Returns `true` if the tray was created on the first attempt.
+pub fn setup_tray_with_retry(app: &AppHandle, show_window_on_failure: bool) -> bool {
+    if setup_tray(app).is_ok() {
+        return true;
+    }
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        for _ in 0..30 {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            let h = handle.clone();
+            let (tx, rx) = std::sync::mpsc::channel();
+            let _ = handle.run_on_main_thread(move || {
+                let _ = tx.send(setup_tray(&h).is_ok());
+            });
+            if rx.recv().unwrap_or(false) {
+                return;
+            }
+        }
+        // Tray never became available: show the UI so the app is not invisible.
+        if show_window_on_failure {
+            let h = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                let _ = open_or_focus_main_window(&h);
+            });
+        }
+    });
+    false
 }

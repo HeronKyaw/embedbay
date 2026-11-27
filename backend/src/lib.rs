@@ -105,7 +105,17 @@ pub fn run() {
                 started_at: std::time::Instant::now(),
             });
 
-            supervisor::tray::setup_tray(app)?;
+            // Re-register autostart on each launch so the entry always points at the
+            // current executable (survives updates/moves) and includes --minimized.
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let launcher = app.autolaunch();
+                if launcher.is_enabled().unwrap_or(false) {
+                    let _ = launcher.enable();
+                }
+            }
+
+            supervisor::tray::setup_tray_with_retry(app.handle(), start_minimized);
 
             if !start_minimized {
                 supervisor::tray::open_or_focus_main_window(app.handle())?;
